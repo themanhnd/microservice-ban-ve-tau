@@ -2,6 +2,7 @@ package com.xxxx.inventory.controller;
 
 import com.xxxx.common.response.ApiResponse;
 import com.xxxx.inventory.controller.dto.request.CreateBucketConfigRequest;
+import com.xxxx.inventory.controller.dto.request.InitializeStockRequest;
 import com.xxxx.inventory.controller.dto.request.ReleaseStockRequest;
 import com.xxxx.inventory.controller.dto.request.ReserveStockRequest;
 import com.xxxx.inventory.controller.dto.response.ReserveStockResponse;
@@ -33,6 +34,17 @@ public class InventoryController {
             @Parameter(description = "Ticket Detail ID") @PathVariable Long ticketDetailId) {
         log.info("Checking stock level for ticketDetailId: {}", ticketDetailId);
         StockLevelResponse response = inventoryService.getStockLevel(ticketDetailId);
+        return ApiResponse.ok(response);
+    }
+
+    @Operation(summary = "Initialize stock", description = "Nạp tồn kho ban đầu khi mở bán (idempotent)")
+    @PostMapping("/stock/initialize")
+    public ApiResponse<StockLevelResponse> initializeStock(
+            @Valid @RequestBody InitializeStockRequest request) {
+        log.info("Initializing stock for ticketDetailId: {}, totalStock: {}",
+                request.getTicketDetailId(), request.getTotalStock());
+        StockLevelResponse response = inventoryService.initializeStock(
+                request.getTicketDetailId(), request.getTotalStock());
         return ApiResponse.ok(response);
     }
 

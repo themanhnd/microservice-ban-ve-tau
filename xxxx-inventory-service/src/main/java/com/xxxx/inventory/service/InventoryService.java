@@ -23,6 +23,17 @@ public interface InventoryService {
     StockLevelResponse getStockLevel(Long ticketDetailId);
 
     /**
+     * Nạp tồn kho ban đầu khi mở bán (idempotent).
+     * Ghi một bản ghi ALLOT vào DB (sổ cái) và khởi tạo các key tồn kho trên Redis.
+     * Gọi lại nhiều lần với cùng ticketDetailId sẽ không nạp trùng.
+     *
+     * @param ticketDetailId ID chi tiết vé
+     * @param totalStock     tổng số vé mở bán
+     * @return mức tồn kho sau khi nạp
+     */
+    StockLevelResponse initializeStock(Long ticketDetailId, int totalStock);
+
+    /**
      * Đặt trước (reserve) tồn kho cho một đơn hàng.
      * Sử dụng optimistic locking hoặc distributed lock để đảm bảo concurrency control.
      *

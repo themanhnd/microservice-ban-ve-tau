@@ -38,6 +38,11 @@ public class InventoryServiceImpl implements InventoryService {
     private static final String LOCK_KEY_PREFIX = "lock:inventory:";
     private static final Duration LOCK_TIMEOUT = Duration.ofSeconds(5);
 
+    // Loại thao tác tồn kho (khớp với cột "type" trong inventory_allot_detail)
+    private static final String TYPE_ALLOT = "ALLOT";
+    private static final String TYPE_RESERVE = "RESERVE";
+    private static final String TYPE_RELEASE = "RELEASE";
+
     private final InventoryAllotDetailRepository inventoryAllotDetailRepository;
     private final InventoryBucketConfigRepository inventoryBucketConfigRepository;
     private final StringRedisTemplate redisTemplate;
@@ -87,6 +92,54 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
+     * Nạp tồn kho ban đầu khi mở bán (idempotent).
+     * Ghi một bản ghi ALLOT vào DB và khởi tạo key tồn kho trên Redis.
+     * Bọc trong distributed lock để tránh nạp đồng thời gây sai số.
+     */
+    @Override
+    @Transactional
+    public StockLevelResponse initializeStock(Long ticketDetailId, int totalStock) {
+        if (totalStock < 0) {
+            throw new IllegalArgumentException("totalStock must not be negative");
+        }
+
+        String lockKey = LOCK_KEY_PREFIX + ticketDetailId;
+        String lockToken = lockService.tryAcquire(lockKey, LOCK_TIMEOUT);
+        if (lockToken == null) {
+            throw new LockAcquisitionException(lockKey);
+        }
+
+        try {
+            // Idempotency: nếu đã nạp ALLOT rồi thì không nạp lại, chỉ trả về mức hiện tại.
+            if (inventoryAllotDetailRepository.existsByTicketDetailIdAndType(ticketDetailId, TYPE_ALLOT)) {
+                log.info("Stock already initialized for ticketDetailId={}, skipping ALLOT", ticketDetailId);
+                rehydrateRedisFromDb(ticketDetailId);
+                return buildStockLevelFromDb(ticketDetailId);
+            }
+
+            // Ghi bản ghi ALLOT vào DB (sổ cái sự thật)
+            InventoryAllotDetailEntity allot = InventoryAllotDetailEntity.builder()
+                    .orderId("INIT-" + ticketDetailId)
+                    .ticketDetailId(ticketDetailId)
+                    .skuId(String.valueOf(ticketDetailId))
+                    .inventorNo(generateInventorNo("ALLOT-" + ticketDetailId, ticketDetailId))
+                    .inventorNum(totalStock)
+                    .type(TYPE_ALLOT)
+                    .delFlag(0)
+                    .build();
+            inventoryAllotDetailRepository.save(allot);
+
+            // Khởi tạo Redis từ DB (total + available)
+            rehydrateRedisFromDb(ticketDetailId);
+
+            log.info("Stock initialized: ticketDetailId={}, totalStock={}", ticketDetailId, totalStock);
+            return buildStockLevelFromDb(ticketDetailId);
+        } finally {
+            lockService.release(lockKey, lockToken);
+        }
+    }
+
+    /**
      * Đặt trước (reserve) tồn kho cho một đơn hàng.
      * Sử dụng Redis distributed lock để đảm bảo concurrency control.
      * Idempotency: kiểm tra orderId + ticketDetailId đã xử lý chưa.
@@ -123,8 +176,14 @@ public class InventoryServiceImpl implements InventoryService {
         }
 
         try {
-            // Check available stock from Redis
+            // Check available stock from Redis. Nếu key chưa có (Redis vừa khởi động/bị xóa),
+            // tự phục hồi từ DB - DB là sổ cái sự thật.
             String availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
+            if (availableStr == null) {
+                log.info("Available stock key missing for ticketDetailId={}, rehydrating from DB", ticketDetailId);
+                rehydrateRedisFromDb(ticketDetailId);
+                availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
+            }
             int availableStock = availableStr != null ? Integer.parseInt(availableStr) : 0;
 
             if (availableStock < quantity) {
@@ -249,19 +308,55 @@ public class InventoryServiceImpl implements InventoryService {
     // ==================== Private Helper Methods ====================
 
     /**
-     * Tính tổng tồn kho từ DB dựa trên các bản ghi allot detail.
+     * Nạp lại (rehydrate) các key tồn kho trên Redis từ DB.
+     * Dùng khi khởi tạo hoặc khi phát hiện cache trống - đảm bảo Redis khớp sổ cái DB.
      */
-    private int calculateTotalStockFromDb(Long ticketDetailId) {
-        // Sum all ALLOT type records for this ticketDetailId
-        // For simplicity, return 0 if no records found
-        return 0;
+    private void rehydrateRedisFromDb(Long ticketDetailId) {
+        int total = calculateTotalStockFromDb(ticketDetailId);
+        int available = calculateAvailableStockFromDb(ticketDetailId);
+        redisTemplate.opsForValue().set(STOCK_CACHE_KEY_PREFIX + ticketDetailId, String.valueOf(total));
+        redisTemplate.opsForValue().set(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, String.valueOf(available));
+        log.debug("Rehydrated Redis from DB: ticketDetailId={}, total={}, available={}",
+                ticketDetailId, total, available);
     }
 
     /**
-     * Tính tồn kho khả dụng từ DB: total - reserved + released.
+     * Dựng StockLevelResponse trực tiếp từ DB (không phụ thuộc Redis).
+     */
+    private StockLevelResponse buildStockLevelFromDb(Long ticketDetailId) {
+        int total = calculateTotalStockFromDb(ticketDetailId);
+        int available = calculateAvailableStockFromDb(ticketDetailId);
+        return StockLevelResponse.builder()
+                .ticketDetailId(ticketDetailId)
+                .totalStock(total)
+                .availableStock(available)
+                .reservedStock(total - available)
+                .soldStock(0)
+                .build();
+    }
+
+    /**
+     * Tính tổng tồn kho từ DB (sổ cái sự thật).
+     * Tổng tồn kho = tổng các bản ghi ALLOT (số vé được nạp vào khi mở bán).
+     */
+    private int calculateTotalStockFromDb(Long ticketDetailId) {
+        return (int) inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_ALLOT);
+    }
+
+    /**
+     * Tính tồn kho khả dụng từ DB: ALLOT - RESERVE + RELEASE.
+     * <ul>
+     *   <li>ALLOT: số vé nạp vào khi mở bán</li>
+     *   <li>RESERVE: số vé đã giữ (trừ đi)</li>
+     *   <li>RELEASE: số vé được trả lại do hủy/bù trừ (cộng lại)</li>
+     * </ul>
      */
     private int calculateAvailableStockFromDb(Long ticketDetailId) {
-        return 0;
+        long allot = inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_ALLOT);
+        long reserved = inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_RESERVE);
+        long released = inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_RELEASE);
+        long available = allot - reserved + released;
+        return (int) Math.max(0, available);
     }
 
     /**

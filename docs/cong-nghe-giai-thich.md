@@ -586,13 +586,21 @@ lâu dài và đối soát.
 > cache) kết hợp **read/write tách vai trò**: việc "nóng" (đếm) làm trên Redis, việc "bền"
 > (lưu trữ) làm trên MySQL.
 
-### ⚠️ Giới hạn cần biết
-Trong code, `calculateTotalStockFromDb()` và `calculateAvailableStockFromDb()` hiện **trả về 0**
-(mới là khung). Nghĩa là nếu Redis bị xóa/mất dữ liệu, fallback tính từ DB sẽ ra 0 → có thể
-hiểu nhầm là "hết vé". Cần hiện thực hóa: tính tồn kho = tổng RESERVE/RELEASE từ bảng
-`inventory_allot_detail`, và có bước "nạp tồn kho ban đầu vào Redis" khi mở bán. Ngoài ra,
-Redis và MySQL được cập nhật **tách rời** (không trong cùng một transaction), nên về lý thuyết
-có thể lệch nếu service chết đúng khe giữa hai bước — cần cơ chế đối soát/khôi phục.
+### ✅ Đã nâng cấp: tính tồn kho từ DB + tự phục hồi Redis
+Trước đây `calculateTotalStockFromDb()` và `calculateAvailableStockFromDb()` **trả về 0**
+(mới là khung) → nếu Redis mất dữ liệu, fallback sẽ hiểu nhầm "hết vé".
+
+Đã khắc phục:
+- Thêm truy vấn tổng hợp `sumQuantityByType(ticketDetailId, type)` trong repository.
+- **Tổng tồn kho** = tổng các bản ghi `ALLOT`; **tồn khả dụng** = `ALLOT - RESERVE + RELEASE`
+  (kẹp về 0 nếu âm). DB là sổ cái sự thật.
+- Thêm API **nạp tồn kho khi mở bán** `POST /api/inventory/stock/initialize` (ghi bản ghi
+  `ALLOT` + nạp Redis), **idempotent** nhờ kiểm tra đã có `ALLOT` chưa.
+- `reserveStock()` giờ **tự phục hồi**: nếu key Redis trống (vừa khởi động/bị xóa), tự nạp lại
+  từ DB rồi mới giữ vé — không còn hiểu nhầm hết vé.
+
+Có 7 unit test bổ sung phủ: tính từ DB lúc cache miss, ghi cache lại, kẹp không âm, nạp tồn
+kho idempotent, và tự phục hồi khi Redis trống.
 
 ---
 
@@ -768,7 +776,7 @@ giữ vé trên key Redis của bucket đó, và xử lý "nạp nguồn" khi bu
 | Bài toán tải cao | Kỹ thuật dùng | Trạng thái trong dự án |
 |------------------|---------------|------------------------|
 | Oversell / race condition | Redis distributed lock (owner-safe) + atomic DECR trong critical section | ✅ Đã nâng cấp khóa an toàn theo chủ sở hữu |
-| Tải đột biến lên DB | Đếm tồn kho trên Redis + cache-aside; MySQL làm sổ cái | ✅ Có (fallback-from-DB còn là khung) |
+| Tải đột biến lên DB | Đếm tồn kho trên Redis + cache-aside; MySQL làm sổ cái | ✅ Có (fallback-from-DB + tự phục hồi Redis đã hoàn chỉnh) |
 | Xử lý trùng (double submit, Kafka at-least-once) | Idempotency key + UNIQUE constraint nhiều tầng | ✅ Đã có, rất nhất quán |
 | Giao dịch xuyên service | Saga orchestration + compensation (release stock) | ✅ Đã có |
 | San tải spike | Kafka bất đồng bộ làm vùng đệm (load leveling) | ✅ Đã có |
@@ -784,6 +792,6 @@ thật sự. Biết rõ ranh giới "đã có vs chưa có" sẽ giúp bạn ưu
 
 ### Gợi ý thứ tự hoàn thiện (nếu mục tiêu là flash sale thật)
 1. ~~**Khóa Redis an toàn** (token + Lua, hoặc Redisson)~~ — ✅ **ĐÃ XONG** (`DistributedLockService`).
-2. **Hiện thực tồn kho từ DB + nạp Redis lúc mở bán** — để fallback đúng và phục hồi được.
+2. ~~**Hiện thực tồn kho từ DB + nạp Redis lúc mở bán**~~ — ✅ **ĐÃ XONG** (`sumQuantityByType`, `initializeStock`, tự phục hồi trong `reserveStock`).
 3. **Nối bucket vào đường giữ vé** — tăng thông lượng cho vé hot.
 4. **Kích hoạt waiting room** — bảo vệ hệ thống và tạo trải nghiệm công bằng.
