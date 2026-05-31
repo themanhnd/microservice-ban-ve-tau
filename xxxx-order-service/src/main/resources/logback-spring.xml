@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logback configuration for xxxx-order-service
+    Other services can copy this file and it will auto-detect the service name
+    from spring.application.name property.
+-->
+<configuration scan="true" scanPeriod="30 seconds">
+
+    <!-- Auto-detect service name from Spring config -->
+    <springProperty scope="context" name="SERVICE_NAME" source="spring.application.name" defaultValue="xxxx-order-service"/>
+
+    <!-- MDC fields: traceId, spanId, serviceName for distributed tracing -->
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [${SERVICE_NAME}] [%thread] [traceId=%X{traceId:-N/A}] [spanId=%X{spanId:-N/A}] %-5level %logger{36} - %msg%n"/>
+
+    <!-- ==================== Appenders ==================== -->
+
+    <!-- Console Appender - for development and local debugging -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Logstash TCP Appender - sends structured JSON logs to ELK stack -->
+    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+        <destination>logstash:5044</destination>
+        <reconnectionDelay>5 seconds</reconnectionDelay>
+        <keepAliveDuration>5 minutes</keepAliveDuration>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Include MDC tracing fields -->
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <!-- Custom fields for service identification -->
+            <customFields>{"service_name":"${SERVICE_NAME}","environment":"${SPRING_PROFILES_ACTIVE:-dev}"}</customFields>
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <timeZone>UTC</timeZone>
+            <!-- Include caller info for error-level logs -->
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                <maxLength>2048</maxLength>
+                <shortenedClassNameLength>20</shortenedClassNameLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+        </encoder>
+    </appender>
+
+    <!-- Async wrapper for Logstash to avoid blocking application threads -->
+    <appender name="ASYNC_LOGSTASH" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="LOGSTASH"/>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+        <neverBlock>true</neverBlock>
+    </appender>
+
+    <!-- ==================== Profile-based Configuration ==================== -->
+
+    <!-- Development profile: console only -->
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.xxxx" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+        <logger name="org.springframework.web" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+    </springProfile>
+
+    <!-- Staging/Production profile: console + ELK -->
+    <springProfile name="staging,prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_LOGSTASH"/>
+        </root>
+        <logger name="com.xxxx" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_LOGSTASH"/>
+        </logger>
+    </springProfile>
+
+    <!-- Default profile (docker-compose): console + ELK -->
+    <springProfile name="default">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_LOGSTASH"/>
+        </root>
+        <logger name="com.xxxx" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_LOGSTASH"/>
+        </logger>
+    </springProfile>
+
+</configuration>

@@ -1,0 +1,132 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: xxxx-gateway
+  cloud:
+    gateway:
+      routes:
+        # Swagger API docs routes
+        - id: booking-service-docs
+          uri: lb://xxxx-booking-service
+          predicates:
+            - Path=/v3/api-docs/booking
+          filters:
+            - RewritePath=/v3/api-docs/booking, /v3/api-docs
+        - id: order-service-docs
+          uri: lb://xxxx-order-service
+          predicates:
+            - Path=/v3/api-docs/order
+          filters:
+            - RewritePath=/v3/api-docs/order, /v3/api-docs
+        - id: payment-service-docs
+          uri: lb://xxxx-payment-service
+          predicates:
+            - Path=/v3/api-docs/payment
+          filters:
+            - RewritePath=/v3/api-docs/payment, /v3/api-docs
+        - id: ticket-service-docs
+          uri: lb://xxxx-ticket-service
+          predicates:
+            - Path=/v3/api-docs/ticket
+          filters:
+            - RewritePath=/v3/api-docs/ticket, /v3/api-docs
+        - id: inventory-service-docs
+          uri: lb://xxxx-inventory-service
+          predicates:
+            - Path=/v3/api-docs/inventory
+          filters:
+            - RewritePath=/v3/api-docs/inventory, /v3/api-docs
+        - id: user-service-docs
+          uri: lb://xxxx-user-service
+          predicates:
+            - Path=/v3/api-docs/user
+          filters:
+            - RewritePath=/v3/api-docs/user, /v3/api-docs
+        - id: event-service-docs
+          uri: lb://xxxx-event-service
+          predicates:
+            - Path=/v3/api-docs/event
+          filters:
+            - RewritePath=/v3/api-docs/event, /v3/api-docs
+        # Business service routes
+        - id: booking-service
+          uri: lb://xxxx-booking-service
+          predicates:
+            - Path=/api/booking/**
+        - id: order-service
+          uri: lb://xxxx-order-service
+          predicates:
+            - Path=/api/orders/**,/api/place-order/**
+        - id: payment-service
+          uri: lb://xxxx-payment-service
+          predicates:
+            - Path=/api/payment/**
+        - id: ticket-service
+          uri: lb://xxxx-ticket-service
+          predicates:
+            - Path=/api/tickets/**,/api/ticket-details/**
+        - id: inventory-service
+          uri: lb://xxxx-inventory-service
+          predicates:
+            - Path=/api/inventory/**
+        - id: user-service
+          uri: lb://xxxx-user-service
+          predicates:
+            - Path=/api/users/**,/api/employees/**
+        - id: event-service
+          uri: lb://xxxx-event-service
+          predicates:
+            - Path=/api/events/**
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+
+gateway:
+  jwt:
+    secret: ${JWT_SECRET:xxxx-default-secret-key-change-in-production-environment-2024}
+    public-endpoints:
+      - /api/payment/vnpay-callback
+      - /api/payment/vnpay-return
+      - /api/users/login
+      - /api/users/register
+      - /swagger-ui.html
+      - /swagger-ui
+      - /v3/api-docs
+      - /webjars
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: Booking Service
+        url: /v3/api-docs/booking
+      - name: Order Service
+        url: /v3/api-docs/order
+      - name: Payment Service
+        url: /v3/api-docs/payment
+      - name: Ticket Service
+        url: /v3/api-docs/ticket
+      - name: Inventory Service
+        url: /v3/api-docs/inventory
+      - name: User Service
+        url: /v3/api-docs/user
+      - name: Event Service
+        url: /v3/api-docs/event
+    urls-primary-name: Booking Service

@@ -1,0 +1,44 @@
+# ===== Maven build output =====
+target/
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+
+# ===== Java =====
+*.class
+hs_err_pid*
+replay_pid*
+
+# ===== IDE: IntelliJ =====
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ===== IDE: Eclipse =====
+.classpath
+.project
+.settings/
+bin/
+
+# ===== IDE: VS Code =====
+.vscode/
+
+# ===== Logs =====
+*.log
+logs/
+build-log.txt
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== Local env / secrets (KHÔNG commit thông tin nhạy cảm) =====
+*.env
+.env.local
+application-local.yml
+application-local.yaml
+
+# ===== Docker / runtime data volumes (nếu mount ra local) =====
+*.pid

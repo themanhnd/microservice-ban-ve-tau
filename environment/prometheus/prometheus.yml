@@ -1,0 +1,68 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'xxxx-discovery'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['discovery:8761']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-config'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['config:8888']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-gateway'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['gateway:8080']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-booking-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['booking-service:8081']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-order-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['order-service:8082']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-payment-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['payment-service:8083']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-ticket-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['ticket-service:8084']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-inventory-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['inventory-service:8085']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-user-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['user-service:8086']
+    scrape_interval: 10s
+
+  - job_name: 'xxxx-event-service'
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['event-service:8087']
+    scrape_interval: 10s
