@@ -41,16 +41,8 @@ Docker Compose handles the startup order via `depends_on` with healthchecks:
 | Service | URL |
 |---------|-----|
 | API Gateway | http://localhost:8080 |
-| Eureka Dashboard | http://localhost:8761 |
-| Config Server | http://localhost:8888 |
 | Swagger UI (Gateway) | http://localhost:8080/swagger-ui.html |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (admin/admin123) |
-| Kibana | http://localhost:5601 |
-| Zipkin | http://localhost:9411 |
-| Kafka (external) | localhost:9094 |
-| MySQL | localhost:3316 (root/root123) |
-| Redis | localhost:6319 |
+| Other services/infra | Internal only on Docker network `xxxx-network` |
 
 ## Running Individual Services (Development)
 

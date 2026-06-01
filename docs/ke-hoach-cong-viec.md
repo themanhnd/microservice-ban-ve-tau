@@ -9,7 +9,7 @@
 
 - [x] **Vá lỗ hổng Config Server** — sửa `search-locations`, mount `environment/config-repo`
       vào Docker, sửa `spring.config.import` để tôn trọng `SPRING_CLOUD_CONFIG_URI`, sửa mật
-      khẩu MySQL (`root` → `root123`) trong 7 file config-repo.
+      khẩu MySQL trong 7 file config-repo.
 - [x] **Tài liệu kiến trúc** — `docs/architecture.md` (kiến trúc, giao tiếp, Saga, ERD,
       observability, luồng VNPay).
 - [x] **Tài liệu công nghệ** — `docs/cong-nghe-giai-thich.md` (lý thuyết + bài toán tải cao).
@@ -51,21 +51,21 @@
 
 ### Nhóm B — Bảo mật (làm TRƯỚC khi lên VPS) — Ưu tiên: CAO
 
-- [ ] **B1. Tách secret hardcode ra biến môi trường**
-  - [ ] MySQL password (`root123`) — docker-compose + config-repo.
-  - [ ] Grafana `admin123` — docker-compose.
-  - [ ] JWT secret mặc định — `xxxx-gateway/application.yml`.
-  - [ ] `encrypt.key` của Config Server — `xxxx-config/application.yml`.
-  - [ ] VNPay `secret-key` — `VnPayService`.
-  - [ ] Tạo file `.env.example` ghi danh sách biến cần set (không chứa giá trị thật).
-- [ ] **B2. Chỉ expose gateway (8080) ra internet** — các service khác để mạng nội bộ Docker.
+- [x] **B1. Tách secret hardcode ra biến môi trường**
+  - [x] MySQL password — docker-compose + config-repo.
+  - [x] Grafana admin password — docker-compose.
+  - [x] JWT secret mặc định — `xxxx-gateway/application.yml`.
+  - [x] `encrypt.key` của Config Server — `xxxx-config/application.yml`.
+  - [x] VNPay `secret-key` — `VnPayService`.
+  - [x] Tạo file `.env.example` ghi danh sách biến cần set (không chứa giá trị thật).
+- [x] **B2. Chỉ expose gateway (8080) ra internet** — các service khác để mạng nội bộ Docker.
 
 ### Nhóm C — Sửa lỗi VNPay (chặn chạy thật) — Ưu tiên: CAO
 
-- [ ] **C1. Thống nhất `return-url`** — code mặc định `127.0.0.1:8080/api/payment/vnpay-return`
-      vs config-repo `localhost:3000/payment/return`. Phải khớp + dùng domain public trên VPS.
-- [ ] **C2. `vnp_IpAddr`** — lấy IP thật của request thay vì cố định `127.0.0.1`.
-- [ ] **C3. `findTransactionByTxnRef`** — đang `findAll().stream()` (quét toàn bảng). Lưu
+- [x] **C1. Thống nhất `return-url`** — code và config-repo cùng dùng gateway return URL,
+      cấu hình bằng `VNPAY_RETURN_URL` để đổi sang domain public trên VPS.
+- [x] **C2. `vnp_IpAddr`** — lấy IP thật của request thay vì cố định `127.0.0.1`.
+- [x] **C3. `findTransactionByTxnRef`** — bỏ quét toàn bảng. Lưu
       `txnRef` thành cột riêng có index, thêm query `findByTxnRef`.
 
 ### Nhóm D — Vận hành & chất lượng — Ưu tiên: Thấp

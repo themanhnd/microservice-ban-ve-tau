@@ -35,7 +35,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PaymentInitiateResponse initiatePayment(InitiatePaymentRequest request) {
+    public PaymentInitiateResponse initiatePayment(InitiatePaymentRequest request, String clientIp) {
         // Idempotency check: use orderId as idempotency key
         String idempotencyKey = request.getOrderId();
         Optional<PaymentTransactionEntity> existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
@@ -52,8 +52,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         // Create new payment transaction with PENDING status
         String transactionId = UUID.randomUUID().toString();
+        String txnRef = transactionId.substring(transactionId.length() - 12);
         PaymentTransactionEntity transaction = PaymentTransactionEntity.builder()
                 .transactionId(transactionId)
+                .txnRef(txnRef)
                 .orderId(request.getOrderId())
                 .userId(request.getUserId())
                 .amount(request.getAmount())
@@ -67,9 +69,10 @@ public class PaymentServiceImpl implements PaymentService {
                 ? request.getDescription()
                 : "Thanh toan don hang: " + request.getOrderId();
         String paymentUrl = vnPayService.createPaymentUrl(
-                transactionId.substring(transactionId.length() - 12),
+                txnRef,
                 request.getAmount().longValue(),
-                orderInfo
+                orderInfo,
+                clientIp
         );
 
         transaction.setPaymentUrl(paymentUrl);
@@ -197,14 +200,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     /**
      * Find transaction by VnPay txnRef.
-     * txnRef is the last 12 characters of the transactionId.
      */
     private Optional<PaymentTransactionEntity> findTransactionByTxnRef(String txnRef) {
-        // Search all transactions and match by txnRef suffix
-        // In production, consider storing txnRef as a separate indexed column
-        return paymentRepository.findAll().stream()
-                .filter(tx -> tx.getTransactionId().endsWith(txnRef))
-                .findFirst();
+        return paymentRepository.findByTxnRef(txnRef);
     }
 
     /**

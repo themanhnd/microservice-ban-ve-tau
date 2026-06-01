@@ -8,6 +8,7 @@ import com.xxxx.payment.controller.dto.response.PaymentStatusResponse;
 import com.xxxx.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,9 +35,10 @@ public class PaymentController {
     @PostMapping("/initiate")
     @Operation(summary = "Initiate payment", description = "Create a new payment transaction and generate VnPay payment URL")
     public ResponseEntity<ApiResponse<PaymentInitiateResponse>> initiatePayment(
-            @Valid @RequestBody InitiatePaymentRequest request) {
+            @Valid @RequestBody InitiatePaymentRequest request,
+            HttpServletRequest httpRequest) {
         log.info("Initiating payment for orderId={}, amount={}", request.getOrderId(), request.getAmount());
-        PaymentInitiateResponse response = paymentService.initiatePayment(request);
+        PaymentInitiateResponse response = paymentService.initiatePayment(request, resolveClientIp(httpRequest));
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
@@ -79,5 +81,19 @@ public class PaymentController {
         log.info("Getting payment status for transactionId={}", transactionId);
         PaymentStatusResponse response = paymentService.getPaymentStatus(transactionId);
         return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        return request.getRemoteAddr();
     }
 }

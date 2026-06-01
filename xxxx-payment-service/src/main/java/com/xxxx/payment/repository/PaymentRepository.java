@@ -14,6 +14,8 @@ public interface PaymentRepository extends JpaRepository<PaymentTransactionEntit
 
     Optional<PaymentTransactionEntity> findByTransactionId(String transactionId);
 
+    Optional<PaymentTransactionEntity> findByTxnRef(String txnRef);
+
     Optional<PaymentTransactionEntity> findByOrderId(String orderId);
 
     Optional<PaymentTransactionEntity> findByIdempotencyKey(String idempotencyKey);

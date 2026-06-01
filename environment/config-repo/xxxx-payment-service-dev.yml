@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3316/payment_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
-    password: root123
+    password: ${MYSQL_ROOT_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -16,8 +16,8 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 vnpay:
-  url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-  tmn-code: YOUR_TMN_CODE
-  hash-secret: YOUR_HASH_SECRET
-  return-url: http://localhost:3000/payment/return
+  payment-url: ${VNPAY_PAYMENT_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+  tmn-code: ${VNPAY_TMN_CODE}
+  secret-key: ${VNPAY_SECRET_KEY}
+  return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/payment/vnpay-return}
   timeout: 30000

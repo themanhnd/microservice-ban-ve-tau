@@ -15,9 +15,10 @@ public interface PaymentService {
      * Creates a PENDING transaction and generates VnPay payment URL.
      *
      * @param request payment initiation request
+     * @param clientIp client IP address for VnPay vnp_IpAddr
      * @return response with transaction ID, payment URL, and status
      */
-    PaymentInitiateResponse initiatePayment(InitiatePaymentRequest request);
+    PaymentInitiateResponse initiatePayment(InitiatePaymentRequest request, String clientIp);
 
     /**
      * Handle VnPay IPN (Instant Payment Notification) callback.

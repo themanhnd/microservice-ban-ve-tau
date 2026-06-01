@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "payment_transaction", indexes = {
         @Index(name = "idx_transaction_id", columnList = "transactionId", unique = true),
+        @Index(name = "idx_txn_ref", columnList = "txnRef", unique = true),
         @Index(name = "idx_order_id", columnList = "orderId"),
         @Index(name = "idx_idempotency_key", columnList = "idempotencyKey", unique = true)
 })
@@ -33,6 +34,9 @@ public class PaymentTransactionEntity {
 
     @Column(nullable = false, unique = true, length = 64)
     private String transactionId;
+
+    @Column(nullable = false, unique = true, length = 32)
+    private String txnRef;
 
     @Column(nullable = false, length = 64)
     private String orderId;

@@ -129,6 +129,16 @@ không cần build lại ứng dụng.
 Khi một service khởi động, nó "tải" cấu hình của mình từ Config Server về (qua
 `spring.config.import`). Một chỗ sửa, mọi service nhận được.
 
+**Điểm bảo mật quan trọng:** Config Server giúp gom cấu hình, nhưng **secret không nên hardcode**
+trong source code hoặc file cấu hình commit lên Git. Các giá trị như mật khẩu MySQL, JWT secret,
+`encrypt.key` và secret VNPay được lấy từ biến môi trường (`MYSQL_ROOT_PASSWORD`, `JWT_SECRET`,
+`ENCRYPT_KEY`, `VNPAY_SECRET_KEY`...). File `.env.example` chỉ ghi tên biến và giá trị mẫu, không
+chứa secret thật.
+
+> **Ví dụ đời thường:** `config-repo` giống bảng hướng dẫn vận hành; còn secret giống chìa khóa két.
+> Bảng hướng dẫn có thể để cho đội kỹ thuật xem, nhưng chìa khóa két phải để trong két/biến môi
+> trường/secret manager, không dán lên bảng.
+
 ---
 
 ## 5. Spring Cloud Gateway
@@ -152,6 +162,11 @@ và đảm nhận các việc "cắt ngang" (cross-cutting concerns):
 **Trong dự án:** `xxxx-gateway` (port 8080) là cổng duy nhất ra ngoài. Nó định tuyến tới các
 service qua tên Eureka (`lb://...`), kiểm tra JWT, và có danh sách `public-endpoints` (các
 URL không cần đăng nhập như login, register, callback VNPay).
+
+Khi chạy bằng Docker Compose, chỉ gateway publish port `8080` ra máy host/internet. MySQL, Redis,
+Kafka, Config Server, Eureka, observability và các business service còn lại chỉ nằm trong Docker
+network nội bộ. Cách này giảm bề mặt tấn công: người ngoài không thể gọi thẳng `payment-service`
+hay truy cập MySQL, mà phải đi qua gateway để bị kiểm tra auth/rate limit.
 
 ---
 
@@ -330,6 +345,10 @@ Trên vé ghi sẵn: tên phim, suất chiếu, ghế (thông tin người dùng
 **Trong dự án:** Gateway kiểm tra JWT cho mọi request (trừ `public-endpoints` như login,
 register, callback VNPay). Token hợp lệ mới được đi tiếp vào các service bên trong.
 
+JWT chỉ an toàn nếu khóa ký đủ mạnh và được giữ bí mật. Vì vậy `gateway.jwt.secret` không còn có
+giá trị mặc định hardcode trong code; khi chạy thật phải truyền `JWT_SECRET` từ môi trường. Nếu lộ
+JWT secret, kẻ tấn công có thể tự ký token giả.
+
 ---
 
 ## 12. Observability
@@ -395,6 +414,16 @@ là cực hình.
 
 **Trong dự án:** File `docker-compose.yml` ở thư mục gốc dựng toàn bộ hệ thống bằng một lệnh
 `docker-compose up -d`, đảm bảo đúng thứ tự: hạ tầng → discovery → config → gateway → service.
+
+Compose cũng là nơi nối biến môi trường vào container. Những secret bắt buộc dùng cú pháp
+`${TEN_BIEN:?TEN_BIEN is required}` để nếu quên set thì container không khởi động âm thầm với
+mật khẩu mặc định yếu. Với môi trường dev, tạo `.env` từ `.env.example`; với VPS/production, nên
+set biến môi trường thật trên server hoặc dùng secret manager.
+
+Một thay đổi quan trọng cho production là **không publish port nội bộ**. Trước đây có thể mở MySQL,
+Redis, Kafka, Grafana... ra host để tiện dev; hiện tại compose chỉ publish `8080:8080` của gateway.
+Muốn xem các công cụ nội bộ thì dùng SSH tunnel, VPN, hoặc profile dev riêng thay vì mở thẳng ra
+internet.
 
 ---
 
@@ -644,8 +673,29 @@ if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
 }
 ```
 
+**Tra cứu giao dịch VNPay — dùng `txnRef` có index thay vì quét toàn bảng:**
+```java
+String txnRef = transactionId.substring(transactionId.length() - 12);
+PaymentTransactionEntity transaction = PaymentTransactionEntity.builder()
+        .transactionId(transactionId)
+        .txnRef(txnRef)
+        .build();
+
+Optional<PaymentTransactionEntity> found = paymentRepository.findByTxnRef(txnRef);
+```
+
+VNPay gửi lại `vnp_TxnRef` trong callback/return URL. Nếu mỗi lần nhận callback lại
+`findAll().stream()` để dò giao dịch thì bảng càng lớn càng chậm. Lưu `txnRef` thành cột riêng,
+đặt unique index, rồi query `findByTxnRef` giúp database tìm đúng bản ghi bằng index.
+
+**Địa chỉ IP và return URL trong VNPay:**
+- `vnp_ReturnUrl` trỏ về gateway: `/api/payment/vnpay-return`, vì gateway là cửa public duy nhất.
+- `VNPAY_RETURN_URL` phải đổi sang domain public thật khi lên VPS.
+- `vnp_IpAddr` lấy từ request thật (`X-Forwarded-For`, `X-Real-IP`, fallback `remoteAddr`) thay vì
+  cố định `127.0.0.1`, để VNPay nhận đúng IP phía người dùng/proxy.
+
 **Chốt chặn ở tầng database (lớp bảo hiểm cuối):** các cột được đặt **UNIQUE** —
-`inventor_no` (kho), `idempotency_key` & `transaction_id` (thanh toán), `order_no` (đơn hàng).
+`inventor_no` (kho), `idempotency_key`, `transaction_id` & `txn_ref` (thanh toán), `order_no` (đơn hàng).
 Kể cả nếu logic phía trên lọt, database vẫn từ chối bản ghi trùng.
 
 > **Lý thuyết:** một thao tác idempotent là thao tác mà thực hiện 1 lần hay N lần đều cho

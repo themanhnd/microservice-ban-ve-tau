@@ -150,15 +150,7 @@ mvn -pl xxxx-inventory-service test
 |------------|-----|
 | API Gateway | http://localhost:8080 |
 | Swagger UI (gom mọi service) | http://localhost:8080/swagger-ui.html |
-| Eureka Dashboard | http://localhost:8761 |
-| Config Server | http://localhost:8888 |
-| Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (admin/admin123) |
-| Kibana | http://localhost:5601 |
-| Zipkin | http://localhost:9411 |
-| MySQL | localhost:3316 (root/root123) |
-| Redis | localhost:6319 |
-| Kafka (external) | localhost:9094 |
+| Các service/infra khác | Chỉ truy cập trong Docker network `xxxx-network` |
 
 ## 📚 Tài liệu chi tiết
 
@@ -170,14 +162,15 @@ mvn -pl xxxx-inventory-service test
 
 ## 🔐 Ghi chú bảo mật
 
-> ⚠️ Dự án đang chứa một số giá trị nhạy cảm **hardcode** phục vụ môi trường dev:
-> mật khẩu MySQL (`root123`), Grafana (`admin123`), JWT secret mặc định,
-> `encrypt.key` của Config Server, và `secret-key` VNPay.
+> Các secret đã được tách ra biến môi trường. Tạo file `.env` từ `.env.example`
+> trước khi chạy Docker Compose.
 >
-> **Trước khi triển khai lên VPS/production**, cần:
-> - Tách các secret này ra biến môi trường / secret manager.
-> - Chỉ expose cổng gateway (8080) ra internet, các service khác để trong mạng nội bộ.
-> - Đổi `vnpay.return-url` và callback URL sang domain public thật.
+> Docker Compose chỉ expose gateway `8080`; MySQL, Redis, Kafka, observability,
+> Config Server, Discovery và các business service còn lại nằm trong Docker network
+> `xxxx-network`.
+>
+> Khi triển khai VPS/production, đặt `VNPAY_RETURN_URL` trỏ tới domain public thật,
+> ví dụ `https://your-domain.example/api/payment/vnpay-return`.
 
 ---
 

@@ -22,7 +22,7 @@ eureka:
     prefer-ip-address: true
 
 encrypt:
-  key: xxxx-microservices-secret-key
+  key: ${ENCRYPT_KEY}
 
 management:
   endpoints:

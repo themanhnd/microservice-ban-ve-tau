@@ -1,21 +1,17 @@
-version: '3.8'
-
 services:
   # ==================== Infrastructure ====================
 
   mysql:
     image: mysql:8.0
     container_name: xxxx-mysql
-    ports:
-      - "3316:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       MYSQL_ROOT_HOST: '%'
     volumes:
       - mysql-data:/var/lib/mysql
       - ./environment/init-db:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -25,8 +21,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: xxxx-redis
-    ports:
-      - "6319:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -56,14 +50,12 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: xxxx-kafka
-    ports:
-      - "9094:9094"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -85,8 +77,6 @@ services:
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: xxxx-prometheus
-    ports:
-      - "9090:9090"
     volumes:
       - ./environment/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
@@ -101,11 +91,9 @@ services:
   grafana:
     image: grafana/grafana:10.1.0
     container_name: xxxx-grafana
-    ports:
-      - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./environment/grafana/provisioning:/etc/grafana/provisioning
@@ -123,8 +111,6 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
     container_name: xxxx-elasticsearch
-    ports:
-      - "9200:9200"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -142,8 +128,6 @@ services:
   logstash:
     image: docker.elastic.co/logstash/logstash:8.10.2
     container_name: xxxx-logstash
-    ports:
-      - "5044:5044"
     environment:
       - "LS_JAVA_OPTS=-Xms256m -Xmx256m"
     volumes:
@@ -162,8 +146,6 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.10.2
     container_name: xxxx-kibana
-    ports:
-      - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
@@ -180,8 +162,6 @@ services:
   zipkin:
     image: openzipkin/zipkin:latest
     container_name: xxxx-zipkin
-    ports:
-      - "9411:9411"
     environment:
       STORAGE_TYPE: elasticsearch
       ES_HOSTS: http://elasticsearch:9200
@@ -203,8 +183,6 @@ services:
       context: ./xxxx-discovery
       dockerfile: Dockerfile
     container_name: xxxx-discovery
-    ports:
-      - "8761:8761"
     environment:
       SPRING_PROFILES_ACTIVE: dev
     healthcheck:
@@ -220,11 +198,10 @@ services:
       context: ./xxxx-config
       dockerfile: Dockerfile
     container_name: xxxx-config
-    ports:
-      - "8888:8888"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      ENCRYPT_KEY: ${ENCRYPT_KEY:?ENCRYPT_KEY is required}
     volumes:
       - ./environment/config-repo:/app/config-repo:ro
     depends_on:
@@ -251,6 +228,7 @@ services:
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
       config:
         condition: service_healthy
@@ -271,15 +249,13 @@ services:
       context: ./xxxx-booking-service
       dockerfile: Dockerfile
     container_name: xxxx-booking-service
-    ports:
-      - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/booking_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -301,15 +277,13 @@ services:
       context: ./xxxx-order-service
       dockerfile: Dockerfile
     container_name: xxxx-order-service
-    ports:
-      - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/order_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -331,19 +305,21 @@ services:
       context: ./xxxx-payment-service
       dockerfile: Dockerfile
     container_name: xxxx-payment-service
-    ports:
-      - "8083:8083"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      VNPAY_PAYMENT_URL: ${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:?VNPAY_TMN_CODE is required}
+      VNPAY_SECRET_KEY: ${VNPAY_SECRET_KEY:?VNPAY_SECRET_KEY is required}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:?VNPAY_RETURN_URL is required}
     depends_on:
       config:
         condition: service_healthy
@@ -361,15 +337,13 @@ services:
       context: ./xxxx-ticket-service
       dockerfile: Dockerfile
     container_name: xxxx-ticket-service
-    ports:
-      - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ticket_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -389,15 +363,13 @@ services:
       context: ./xxxx-inventory-service
       dockerfile: Dockerfile
     container_name: xxxx-inventory-service
-    ports:
-      - "8085:8085"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/inventory_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -419,15 +391,13 @@ services:
       context: ./xxxx-user-service
       dockerfile: Dockerfile
     container_name: xxxx-user-service
-    ports:
-      - "8086:8086"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -447,15 +417,13 @@ services:
       context: ./xxxx-event-service
       dockerfile: Dockerfile
     container_name: xxxx-event-service
-    ports:
-      - "8087:8087"
     environment:
       SPRING_PROFILES_ACTIVE: dev
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_CLOUD_CONFIG_URI: http://config:8888
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/event_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root123
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092

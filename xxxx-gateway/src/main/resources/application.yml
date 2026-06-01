@@ -101,7 +101,7 @@ management:
 
 gateway:
   jwt:
-    secret: ${JWT_SECRET:xxxx-default-secret-key-change-in-production-environment-2024}
+    secret: ${JWT_SECRET}
     public-endpoints:
       - /api/payment/vnpay-callback
       - /api/payment/vnpay-return

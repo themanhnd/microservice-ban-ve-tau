@@ -312,7 +312,7 @@ flowchart TB
 
     subgraph METRICS[Metrics]
         PROM["Prometheus :9090<br/>scrape /actuator/prometheus moi 10s"]
-        GRAF["Grafana :3000<br/>(admin/admin123)"]
+        GRAF["Grafana :3000<br/>(admin password from env)"]
     end
 
     subgraph LOGS[Logs - ELK]
@@ -401,15 +401,15 @@ sequenceDiagram
 Sau buoc 3, event `payment.completed` / `payment.failed` di vao saga o muc 3 (order-service
 tieu thu de xac nhan hoac huy don).
 
-### Diem can xu ly truoc khi len VPS
+### Trang thai xu ly truoc khi len VPS
 
-| Van de | Vi tri | Anh huong |
-|--------|--------|-----------|
-| `secret-key` co gia tri mac dinh hardcode | `VnPayService` | Bao mat - phai dua ra bien moi truong / secret |
-| `vnp_IpAddr` co dinh `127.0.0.1` | `VnPayService.createPaymentUrl` | VNPay co the tu choi/sai IP that |
-| `return-url` mac dinh `127.0.0.1:8080`, config-repo lai ghi `localhost:3000/payment/return` | `VnPayService` vs `xxxx-payment-service-dev.yml` | Khong khop - tren VPS phai la domain public that |
-| callback URL phai PUBLIC de VNPay goi vao | gateway `public-endpoints` | Tren VPS can mo `/api/payment/vnpay-callback` ra internet (da khai bao public, bo qua JWT) |
-| `findTransactionByTxnRef` dung `findAll().stream()` | `PaymentServiceImpl` | Quet toan bang - cham khi du lieu lon, nen luu `txnRef` thanh cot rieng co index |
+| Hang muc | Vi tri | Trang thai |
+|--------|--------|------------|
+| `secret-key` VNPay | `VnPayService`, config-repo | Lay tu `VNPAY_SECRET_KEY`, khong con default hardcode |
+| `vnp_IpAddr` | `PaymentController` -> `VnPayService.createPaymentUrl` | Lay tu `X-Forwarded-For`, `X-Real-IP`, fallback `remoteAddr` |
+| `return-url` | `xxxx-payment-service-dev.yml`, `VnPayService` | Dung `VNPAY_RETURN_URL`, default local qua gateway `/api/payment/vnpay-return` |
+| callback URL public | gateway `public-endpoints` | `/api/payment/vnpay-callback` va `/api/payment/vnpay-return` bo qua JWT |
+| Tra cuu transaction theo `txnRef` | `PaymentTransactionEntity`, `PaymentRepository` | Da co cot `txnRef` unique index va query `findByTxnRef` |
 
 > `vnpay.return-url` va `vnp_ReturnUrl` tro toi gateway (`/api/payment/vnpay-return`) - dung,
-> vi gateway la cua ngo public duy nhat. Tren VPS thay `127.0.0.1`/`localhost` bang domain that.
+> vi gateway la cua ngo public duy nhat. Tren VPS set `VNPAY_RETURN_URL` bang domain that.

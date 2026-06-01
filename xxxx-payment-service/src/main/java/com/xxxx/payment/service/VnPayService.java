@@ -21,7 +21,7 @@ import java.util.TreeMap;
 @Slf4j
 public class VnPayService {
 
-    @Value("${vnpay.secret-key:A5804EB6E1C63A6E771729A696A841E6}")
+    @Value("${vnpay.secret-key}")
     private String secretKey;
 
     @Value("${vnpay.tmn-code:VNPAY}")
@@ -30,7 +30,7 @@ public class VnPayService {
     @Value("${vnpay.payment-url:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}")
     private String vnpPaymentUrl;
 
-    @Value("${vnpay.return-url:http://127.0.0.1:8080/api/payment/vnpay-return}")
+    @Value("${vnpay.return-url:http://localhost:8080/api/payment/vnpay-return}")
     private String returnUrl;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -41,9 +41,10 @@ public class VnPayService {
      * @param txnRef transaction reference (used as vnp_TxnRef)
      * @param amount payment amount in VND
      * @param orderInfo order description
+     * @param clientIp client IP address sent to VnPay as vnp_IpAddr
      * @return full VnPay payment URL with signature
      */
-    public String createPaymentUrl(String txnRef, long amount, String orderInfo) {
+    public String createPaymentUrl(String txnRef, long amount, String orderInfo, String clientIp) {
         try {
             Map<String, String> vnpParams = new TreeMap<>();
             vnpParams.put("vnp_Version", "2.1.0");
@@ -57,7 +58,7 @@ public class VnPayService {
             vnpParams.put("vnp_OrderInfo", orderInfo);
             vnpParams.put("vnp_Locale", "vn");
             vnpParams.put("vnp_ReturnUrl", returnUrl);
-            vnpParams.put("vnp_IpAddr", "127.0.0.1");
+            vnpParams.put("vnp_IpAddr", normalizeClientIp(clientIp));
             vnpParams.put("vnp_CreateDate", DATE_FORMATTER.format(LocalDateTime.now()));
 
             // Build hash data and query string from sorted params
@@ -144,5 +145,12 @@ public class VnPayService {
         } catch (Exception e) {
             throw new RuntimeException("Error generating HMAC-SHA512 signature", e);
         }
+    }
+
+    private String normalizeClientIp(String clientIp) {
+        if (clientIp == null || clientIp.isBlank()) {
+            return "127.0.0.1";
+        }
+        return clientIp.trim();
     }
 }
