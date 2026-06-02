@@ -171,6 +171,10 @@ mvn -pl xxxx-inventory-service test
 >
 > Khi triển khai VPS/production, đặt `VNPAY_RETURN_URL` trỏ tới domain public thật,
 > ví dụ `https://your-domain.example/api/payment/vnpay-return`.
+>
+> Auth hiện tại do `user-service` cấp token sau login. Frontend không cần nhập JWT gateway thủ
+> công. `JWT_SECRET` bắt buộc lấy từ biến môi trường và dài tối thiểu 32 ký tự; có thể cấu hình
+> thêm `JWT_ISSUER`, `JWT_EXPIRATION_SECONDS`, `JWT_REFRESH_EXPIRATION_SECONDS`.
 
 ---
 

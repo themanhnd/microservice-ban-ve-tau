@@ -2,8 +2,11 @@ package com.xxxx.user.controller;
 
 import com.xxxx.common.response.ApiResponse;
 import com.xxxx.user.controller.dto.request.LoginRequest;
+import com.xxxx.user.controller.dto.request.LogoutRequest;
+import com.xxxx.user.controller.dto.request.RefreshTokenRequest;
 import com.xxxx.user.controller.dto.request.RegisterRequest;
 import com.xxxx.user.controller.dto.response.LoginResponse;
+import com.xxxx.user.controller.dto.response.TokenResponse;
 import com.xxxx.user.controller.dto.response.UserResponse;
 import com.xxxx.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +32,20 @@ public class UserController {
         log.info("Login attempt for user: {}", request.getUsername());
         LoginResponse response = userService.login(request);
         return ApiResponse.ok(response);
+    }
+
+    @Operation(summary = "Refresh token", description = "Issue a new access token from a valid refresh token")
+    @PostMapping("/refresh")
+    public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        TokenResponse response = userService.refresh(request);
+        return ApiResponse.ok(response);
+    }
+
+    @Operation(summary = "Logout", description = "Revoke a refresh token")
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@Valid @RequestBody LogoutRequest request) {
+        userService.logout(request);
+        return ApiResponse.ok(null);
     }
 
     @Operation(summary = "Register", description = "Register a new user account")

@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Global filter that validates JWT tokens from the Authorization header.
@@ -40,6 +41,9 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
     @Value("${gateway.jwt.secret}")
     private String jwtSecret;
+
+    @Value("${gateway.jwt.issuer:xxxx-user-service}")
+    private String jwtIssuer;
 
     @Value("${gateway.jwt.public-endpoints}")
     private List<String> publicEndpoints;
@@ -64,6 +68,9 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
         try {
             Claims claims = validateToken(token);
+            if (requiresAdminRole(request) && !hasRole(claims.get("roles", String.class), "ADMIN")) {
+                return onForbidden(exchange, "Insufficient permissions");
+            }
 
             // Extract user info and pass as headers to downstream services
             ServerHttpRequest mutatedRequest = request.mutate()
@@ -102,9 +109,45 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         return Jwts.parser()
                 .verifyWith(key)
+                .requireIssuer(jwtIssuer)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    private boolean requiresAdminRole(ServerHttpRequest request) {
+        String method = request.getMethod().name();
+        String path = request.getURI().getPath();
+
+        if (path.startsWith("/api/employees")) {
+            return true;
+        }
+
+        if (isMutatingMethod(method) && (path.startsWith("/api/events")
+                || path.startsWith("/api/tickets")
+                || path.startsWith("/api/ticket-details")
+                || path.startsWith("/api/inventory"))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean isMutatingMethod(String method) {
+        return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method) || "DELETE".equals(method);
+    }
+
+    private boolean hasRole(String rolesClaim, String expectedRole) {
+        if (rolesClaim == null || rolesClaim.isBlank()) {
+            return false;
+        }
+        String normalizedExpectedRole = expectedRole.toUpperCase(Locale.ROOT);
+        for (String role : rolesClaim.split(",")) {
+            if (normalizedExpectedRole.equals(role.trim().toUpperCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Mono<Void> onUnauthorized(ServerWebExchange exchange, String message) {
@@ -114,6 +157,20 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         response.getHeaders().add("Content-Type", "application/json");
         String body = String.format(
                 "{\"success\":false,\"code\":\"401\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
+                message, java.time.LocalDateTime.now()
+        );
+        org.springframework.core.io.buffer.DataBuffer buffer =
+                response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
+    }
+
+    private Mono<Void> onForbidden(ServerWebExchange exchange, String message) {
+        log.debug("Forbidden request: {}", message);
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.FORBIDDEN);
+        response.getHeaders().add("Content-Type", "application/json");
+        String body = String.format(
+                "{\"success\":false,\"code\":\"403\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
                 message, java.time.LocalDateTime.now()
         );
         org.springframework.core.io.buffer.DataBuffer buffer =

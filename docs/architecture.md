@@ -413,3 +413,68 @@ tieu thu de xac nhan hoac huy don).
 
 > `vnpay.return-url` va `vnp_ReturnUrl` tro toi gateway (`/api/payment/vnpay-return`) - dung,
 > vi gateway la cua ngo public duy nhat. Tren VPS set `VNPAY_RETURN_URL` bang domain that.
+
+## 10. Luong xac thuc & phan quyen hien tai
+
+Cap nhat ngay 2026-06-02: luong xac thuc da chuyen sang mo hinh gateway-first dung hon cho
+microservices. Frontend khong nhap JWT gateway thu cong nua; token duoc cap boi `user-service`
+sau khi dang nhap va duoc gateway kiem tra o moi request can bao ve.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant FE as Frontend
+    participant GW as xxxx-gateway
+    participant US as user-service
+    participant SVC as business service
+
+    U->>FE: dang nhap email/password
+    FE->>GW: POST /api/users/login
+    GW->>US: route public login
+    US->>US: kiem tra password BCrypt
+    US-->>FE: accessToken ngan han + refreshToken
+
+    FE->>GW: request API kem Authorization: Bearer accessToken
+    GW->>GW: verify signature, issuer, expiry, roles
+    GW->>SVC: forward request + X-User-Id / X-User-Email / X-User-Roles
+
+    alt accessToken het han
+        FE->>GW: POST /api/users/refresh kem refreshToken
+        GW->>US: route public refresh
+        US->>US: revoke refresh token cu, tao token moi
+        US-->>FE: accessToken moi + refreshToken moi
+    end
+
+    FE->>GW: POST /api/users/logout
+    GW->>US: revoke refreshToken
+```
+
+### Nguyen tac bao mat da ap dung
+
+| Hang muc | Cach xu ly |
+|----------|------------|
+| Password | Luu bang BCrypt cost 12. User cu dung SHA-256 duoc migrate sang BCrypt sau lan login thanh cong. |
+| Access token | JWT ngan han, ky HMAC bang `JWT_SECRET`, co `issuer`, `jti`, `email`, `roles`. |
+| Refresh token | Token random, chi luu hash trong DB, rotate moi lan refresh, revoke khi logout. |
+| Gateway | La diem validate JWT va phan quyen role. Service nghiep vu nhan identity qua header noi bo. |
+| Role | User mac dinh `USER`; endpoint quan tri/mutating can `ADMIN` tai gateway. |
+| Config | `JWT_SECRET` bat buoc lay tu bien moi truong va dai toi thieu 32 ky tu. |
+
+### Endpoint public lien quan auth
+
+| Endpoint | Ghi chu |
+|----------|---------|
+| `POST /api/users/register` | Dang ky tai khoan, mat khau luu BCrypt. |
+| `POST /api/users/login` | Dang nhap, cap access token va refresh token. |
+| `POST /api/users/refresh` | Doi refresh token lay access token moi. |
+| `POST /api/users/logout` | Thu hoi refresh token. |
+
+### Endpoint can role ADMIN tai gateway
+
+- Toan bo `/api/employees/**`.
+- Cac request ghi du lieu (`POST`, `PUT`, `PATCH`, `DELETE`) tren `/api/events`, `/api/tickets`,
+  `/api/ticket-details`, `/api/inventory`.
+
+Day la lop phan quyen o edge. Neu muon chat hon nua cho production, buoc tiep theo nen them
+kiem tra authorization trong tung service quan trong de phong truong hop service bi goi truc tiep
+trong mang noi bo.

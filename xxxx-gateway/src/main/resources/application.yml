@@ -102,11 +102,13 @@ management:
 gateway:
   jwt:
     secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:xxxx-user-service}
     public-endpoints:
       - /api/payment/vnpay-callback
       - /api/payment/vnpay-return
       - /api/users/login
       - /api/users/register
+      - /api/users/refresh
       - /swagger-ui.html
       - /swagger-ui
       - /v3/api-docs

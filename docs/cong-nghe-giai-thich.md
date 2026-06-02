@@ -845,3 +845,61 @@ thật sự. Biết rõ ranh giới "đã có vs chưa có" sẽ giúp bạn ưu
 2. ~~**Hiện thực tồn kho từ DB + nạp Redis lúc mở bán**~~ — ✅ **ĐÃ XONG** (`sumQuantityByType`, `initializeStock`, tự phục hồi trong `reserveStock`).
 3. **Nối bucket vào đường giữ vé** — tăng thông lượng cho vé hot.
 4. **Kích hoạt waiting room** — bảo vệ hệ thống và tạo trải nghiệm công bằng.
+
+---
+
+## Cập nhật 2026-06-02: Xác thực đúng chuẩn hơn cho microservices
+
+Trước đó frontend phải nhập JWT gateway thủ công. Cách này khó dùng và không đúng vai trò của
+hệ thống xác thực: người dùng không nên tự tạo/tự điền token; token phải được cấp sau khi đăng
+nhập thành công.
+
+### Cách mới đang chạy
+
+1. Người dùng đăng nhập bằng email/password.
+2. `user-service` kiểm tra password bằng BCrypt.
+3. Nếu hợp lệ, `user-service` cấp:
+   - `accessToken`: sống ngắn, dùng gọi API.
+   - `refreshToken`: sống dài hơn, dùng lấy access token mới khi access token hết hạn.
+4. Frontend tự lưu token và tự refresh khi gateway trả `401`.
+5. Gateway validate JWT, đọc `roles`, rồi mới route request vào service nghiệp vụ.
+
+### Vì sao dùng access token + refresh token?
+
+Access token giống vé vào cổng trong thời gian ngắn. Nếu bị lộ, thời gian nguy hiểm nhỏ vì token
+hết hạn nhanh. Refresh token giống phiếu đổi vé mới: sống dài hơn nhưng được lưu hash trong DB,
+có thể revoke khi logout hoặc khi phát hiện bất thường.
+
+### Vì sao password phải dùng BCrypt?
+
+SHA-256 là hàm băm nhanh, phù hợp kiểm tra toàn vẹn dữ liệu, không phù hợp lưu mật khẩu. Kẻ tấn
+công có thể thử hàng tỷ mật khẩu mỗi giây nếu lấy được hash. BCrypt chậm có chủ đích và có salt
+riêng cho từng password, làm việc brute-force tốn kém hơn rất nhiều.
+
+Dự án vẫn cho user cũ login bằng hash SHA-256, nhưng sau lần login thành công sẽ tự lưu lại bằng
+BCrypt. Đây là cách migrate mềm: không bắt tất cả user đổi mật khẩu ngay, nhưng dần đưa dữ liệu
+về chuẩn mới.
+
+### Role và gateway authorization
+
+JWT có claim `roles`. Gateway dùng claim này để chặn các API quản trị:
+- `/api/employees/**` cần `ADMIN`.
+- Các request ghi dữ liệu trên event, ticket, ticket detail, inventory cần `ADMIN`.
+
+Frontend chỉ ẩn/hiện menu theo role để trải nghiệm dễ dùng hơn. Quyền thật sự vẫn phải chặn ở
+backend/gateway, vì bất kỳ ai cũng có thể gọi API trực tiếp bằng Postman/curl.
+
+### Các biến môi trường auth
+
+| Biến | Ý nghĩa |
+|------|---------|
+| `JWT_SECRET` | Khóa ký JWT, bắt buộc dài tối thiểu 32 ký tự. |
+| `JWT_ISSUER` | Đơn vị phát hành token, mặc định `xxxx-user-service`. |
+| `JWT_EXPIRATION_SECONDS` | Thời gian sống access token, mặc định 1800 giây. |
+| `JWT_REFRESH_EXPIRATION_SECONDS` | Thời gian sống refresh token, mặc định 604800 giây. |
+
+### Việc nên làm tiếp
+
+- Thêm seed/bootstrap admin bằng biến môi trường để không phải sửa DB thủ công.
+- Bổ sung integration test cho login -> refresh -> logout -> gateway authorization.
+- Thêm authorization trong từng service quan trọng, không chỉ dựa vào gateway.

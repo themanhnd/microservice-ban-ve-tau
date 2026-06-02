@@ -1,7 +1,7 @@
 # 📋 Kế hoạch công việc (Work Plan)
 
 > File này để theo dõi tiến độ và biết tiếp tục từ đâu. Tick `[x]` khi xong.
-> Cập nhật lần cuối: 2026-06-01
+> Cập nhật lần cuối: 2026-06-02
 
 ---
 
@@ -19,6 +19,12 @@
       Lua release theo token), 11 unit test.
 - [x] **Flash sale #2: Tồn kho từ DB + tự phục hồi Redis** — `sumQuantityByType`,
       `initializeStock` (idempotent), `reserveStock` tự rehydrate, 7 unit test.
+- [x] **Auth #1: Bỏ nhập JWT gateway thủ công trên frontend** — `user-service` cấp access token
+      và refresh token sau login; frontend tự refresh khi `401`, logout sẽ revoke refresh token.
+- [x] **Auth #2: Nâng cấp password hashing** — BCrypt cost 12, user cũ SHA-256 được migrate
+      mềm sang BCrypt sau lần login thành công.
+- [x] **Auth #3: Role-based gateway authorization** — JWT có issuer/roles; gateway yêu cầu
+      `ADMIN` cho endpoint nhân viên và các request ghi dữ liệu quản trị.
 
 ---
 
@@ -59,6 +65,17 @@
   - [x] VNPay `secret-key` — `VnPayService`.
   - [x] Tạo file `.env.example` ghi danh sách biến cần set (không chứa giá trị thật).
 - [x] **B2. Chỉ expose gateway (8080) ra internet** — các service khác để mạng nội bộ Docker.
+- [x] **B3. Auth đúng chuẩn hơn**
+  - [x] User-service cấp JWT sau login, không yêu cầu frontend nhập token gateway thủ công.
+  - [x] Access token ngắn hạn + refresh token rotate/revoke.
+  - [x] Refresh token chỉ lưu hash trong database.
+  - [x] Gateway validate issuer và role.
+
+- [ ] **B4. Hardening auth tiếp theo**
+  - [ ] Thêm seed/bootstrap admin bằng biến môi trường.
+  - [ ] Thêm integration test cho login → refresh → logout.
+  - [ ] Thêm authorization trong service nội bộ cho endpoint quan trọng, không chỉ dựa vào gateway.
+  - [ ] Thêm rate limit riêng cho login/refresh.
 
 ### Nhóm C — Sửa lỗi VNPay (chặn chạy thật) — Ưu tiên: CAO
 

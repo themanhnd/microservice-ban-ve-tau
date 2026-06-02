@@ -39,6 +39,10 @@ public class UserEntity {
     @Builder.Default
     private String status = "ACTIVE";
 
+    @Column(nullable = false, length = 30, columnDefinition = "varchar(30) default 'USER'")
+    @Builder.Default
+    private String role = "USER";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
