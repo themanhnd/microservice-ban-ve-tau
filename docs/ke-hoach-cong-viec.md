@@ -74,8 +74,48 @@
 - [ ] **B4. Hardening auth tiếp theo**
   - [ ] Thêm seed/bootstrap admin bằng biến môi trường.
   - [ ] Thêm integration test cho login → refresh → logout.
-  - [ ] Thêm authorization trong service nội bộ cho endpoint quan trọng, không chỉ dựa vào gateway.
   - [ ] Thêm rate limit riêng cho login/refresh.
+
+- [ ] **B5. Chuyển đúng mô hình Gateway authenticate, Service authorize** — Ưu tiên: CAO
+  - Mục tiêu: gateway chỉ xác thực JWT và forward token; từng service tự verify JWT lại và tự
+    quyết định quyền theo nghiệp vụ. Không phụ thuộc hoàn toàn vào rule role ở gateway.
+  - Nguyên tắc:
+    - [ ] Gateway validate JWT (`signature`, `issuer`, `expiry`) cho endpoint private.
+    - [ ] Gateway strip mọi header identity do client gửi: `X-User-Id`, `X-User-Email`, `X-User-Roles`.
+    - [ ] Gateway forward nguyên `Authorization: Bearer <token>` xuống service.
+    - [ ] `X-User-*` nếu còn dùng thì chỉ là metadata phụ cho log/debug, không phải nguồn phân quyền chính.
+    - [ ] Service verify JWT lại trước khi authorize.
+  - Việc cần làm:
+    - [ ] Tạo shared JWT validation/auth helper trong `xxxx-common` nếu phù hợp, hoặc module security chung
+          để tránh copy-paste parser ở từng service.
+    - [ ] Chuẩn hóa claim JWT: `sub` = user id, `email`, `roles`, `iss`, `exp`, `jti`.
+    - [ ] Sửa `xxxx-gateway`: bỏ rule authorization chi tiết theo path/method, giữ public/private guard,
+          strip header giả mạo và forward `Authorization`.
+    - [ ] Thêm `SecurityConfig` + `JwtAuthenticationFilter` + principal nội bộ cho các service quan trọng.
+    - [ ] Map role sang Spring authority: `ADMIN` → `ROLE_ADMIN`, `USER` → `ROLE_USER`.
+    - [ ] Dùng `@EnableMethodSecurity` và `@PreAuthorize` cho endpoint cần quyền.
+    - [ ] Chuẩn hóa response `401 Unauthorized` và `403 Forbidden`.
+  - Rule endpoint ưu tiên:
+    - [ ] `xxxx-user-service`: `/api/employees/**` cần `ADMIN`; `/api/users/{id}` là chính user đó hoặc `ADMIN`.
+    - [ ] `xxxx-event-service`: create/update/delete event cần `ADMIN`.
+    - [ ] `xxxx-ticket-service`: create/update/delete ticket và ticket detail cần `ADMIN`.
+    - [ ] `xxxx-inventory-service`: initialize stock, sửa tồn kho, bucket config cần `ADMIN`.
+    - [ ] `xxxx-order-service`: user chỉ xem/hủy order của mình; `ADMIN` xem tất cả.
+    - [ ] `xxxx-booking-service`: user chỉ xem booking của mình; `ADMIN` xem tất cả.
+    - [ ] `xxxx-payment-service`: VNPay callback/return vẫn public; transaction/admin endpoint cần `ADMIN`
+          hoặc owner check.
+  - Test bắt buộc:
+    - [ ] Gateway reject endpoint private khi thiếu/invalid token.
+    - [ ] Gateway strip `X-User-Roles: ADMIN` giả từ client.
+    - [ ] Service reject request gọi thẳng không có JWT.
+    - [ ] Service reject user thường gọi endpoint admin.
+    - [ ] Service accept admin gọi endpoint admin.
+    - [ ] Owner rule: user A không xem được order/booking/payment của user B.
+    - [ ] Public endpoint vẫn chạy: login/register/refresh, VNPay callback/return, event listing nếu public.
+  - Tài liệu:
+    - [ ] Cập nhật `docs/architecture.md` flow auth mới.
+    - [ ] Cập nhật `docs/cong-nghe-giai-thich.md` phần Gateway authentication vs Service authorization.
+    - [ ] Cập nhật lại mục này sau khi triển khai xong.
 
 ### Nhóm C — Sửa lỗi VNPay (chặn chạy thật) — Ưu tiên: CAO
 
