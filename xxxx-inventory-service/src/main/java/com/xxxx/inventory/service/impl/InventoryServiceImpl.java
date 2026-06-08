@@ -19,14 +19,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Implementation của InventoryService.
- * Kết hợp logic từ InventoryAllotmentDomainService + OrderDeductionDomainService.
- * Sử dụng Redis distributed lock cho concurrency control khi reserve/release stock.
+ * Implementation cÃ¡Â»Â§a InventoryService.
+ * KÃ¡ÂºÂ¿t hÃ¡Â»Â£p logic tÃ¡Â»Â« InventoryAllotmentDomainService + OrderDeductionDomainService.
+ * SÃ¡Â»Â­ dÃ¡Â»Â¥ng Redis distributed lock cho concurrency control khi reserve/release stock.
  */
 @Slf4j
 @Service
@@ -36,9 +37,10 @@ public class InventoryServiceImpl implements InventoryService {
     private static final String STOCK_CACHE_KEY_PREFIX = "stock:";
     private static final String STOCK_AVAILABLE_KEY_PREFIX = "stock:available:";
     private static final String LOCK_KEY_PREFIX = "lock:inventory:";
+    private static final int DEFAULT_BUCKET_NUM = 1;
     private static final Duration LOCK_TIMEOUT = Duration.ofSeconds(5);
 
-    // Loại thao tác tồn kho (khớp với cột "type" trong inventory_allot_detail)
+    // LoÃ¡ÂºÂ¡i thao tÃƒÂ¡c tÃ¡Â»â€œn kho (khÃ¡Â»â€ºp vÃ¡Â»â€ºi cÃ¡Â»â„¢t "type" trong inventory_allot_detail)
     private static final String TYPE_ALLOT = "ALLOT";
     private static final String TYPE_RESERVE = "RESERVE";
     private static final String TYPE_RELEASE = "RELEASE";
@@ -49,8 +51,8 @@ public class InventoryServiceImpl implements InventoryService {
     private final DistributedLockService lockService;
 
     /**
-     * Lấy thông tin mức tồn kho hiện tại cho một ticket detail.
-     * Ưu tiên đọc từ Redis cache, nếu không có thì tính toán từ DB.
+     * LÃ¡ÂºÂ¥y thÃƒÂ´ng tin mÃ¡Â»Â©c tÃ¡Â»â€œn kho hiÃ¡Â»â€¡n tÃ¡ÂºÂ¡i cho mÃ¡Â»â„¢t ticket detail.
+     * Ã†Â¯u tiÃƒÂªn Ã„â€˜Ã¡Â»Âc tÃ¡Â»Â« Redis cache, nÃ¡ÂºÂ¿u khÃƒÂ´ng cÃƒÂ³ thÃƒÂ¬ tÃƒÂ­nh toÃƒÂ¡n tÃ¡Â»Â« DB.
      */
     @Override
     public StockLevelResponse getStockLevel(Long ticketDetailId) {
@@ -59,8 +61,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         if (cachedStock != null) {
             int totalStock = Integer.parseInt(cachedStock);
-            String availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
-            int availableStock = availableStr != null ? Integer.parseInt(availableStr) : totalStock;
+            int availableStock = readAvailableStockFromRedis(ticketDetailId, totalStock);
             int reservedStock = totalStock - availableStock;
 
             return StockLevelResponse.builder()
@@ -72,15 +73,15 @@ public class InventoryServiceImpl implements InventoryService {
                     .build();
         }
 
-        // Fallback: tính toán từ DB records
+        // Fallback: tÃƒÂ­nh toÃƒÂ¡n tÃ¡Â»Â« DB records
         log.info("Cache miss for ticketDetailId={}, calculating from DB", ticketDetailId);
         int totalStock = calculateTotalStockFromDb(ticketDetailId);
         int availableStock = calculateAvailableStockFromDb(ticketDetailId);
         int reservedStock = totalStock - availableStock;
 
-        // Cache lại kết quả
+        // Cache lÃ¡ÂºÂ¡i kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£
         redisTemplate.opsForValue().set(cacheKey, String.valueOf(totalStock));
-        redisTemplate.opsForValue().set(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, String.valueOf(availableStock));
+        writeAvailableStockToRedis(ticketDetailId, availableStock);
 
         return StockLevelResponse.builder()
                 .ticketDetailId(ticketDetailId)
@@ -92,9 +93,9 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Nạp tồn kho ban đầu khi mở bán (idempotent).
-     * Ghi một bản ghi ALLOT vào DB và khởi tạo key tồn kho trên Redis.
-     * Bọc trong distributed lock để tránh nạp đồng thời gây sai số.
+     * NÃ¡ÂºÂ¡p tÃ¡Â»â€œn kho ban Ã„â€˜Ã¡ÂºÂ§u khi mÃ¡Â»Å¸ bÃƒÂ¡n (idempotent).
+     * Ghi mÃ¡Â»â„¢t bÃ¡ÂºÂ£n ghi ALLOT vÃƒÂ o DB vÃƒÂ  khÃ¡Â»Å¸i tÃ¡ÂºÂ¡o key tÃ¡Â»â€œn kho trÃƒÂªn Redis.
+     * BÃ¡Â»Âc trong distributed lock Ã„â€˜Ã¡Â»Æ’ trÃƒÂ¡nh nÃ¡ÂºÂ¡p Ã„â€˜Ã¡Â»â€œng thÃ¡Â»Âi gÃƒÂ¢y sai sÃ¡Â»â€˜.
      */
     @Override
     @Transactional
@@ -102,7 +103,6 @@ public class InventoryServiceImpl implements InventoryService {
         if (totalStock < 0) {
             throw new IllegalArgumentException("totalStock must not be negative");
         }
-
         String lockKey = LOCK_KEY_PREFIX + ticketDetailId;
         String lockToken = lockService.tryAcquire(lockKey, LOCK_TIMEOUT);
         if (lockToken == null) {
@@ -110,14 +110,14 @@ public class InventoryServiceImpl implements InventoryService {
         }
 
         try {
-            // Idempotency: nếu đã nạp ALLOT rồi thì không nạp lại, chỉ trả về mức hiện tại.
+            // Idempotency: nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂ£ nÃ¡ÂºÂ¡p ALLOT rÃ¡Â»â€œi thÃƒÂ¬ khÃƒÂ´ng nÃ¡ÂºÂ¡p lÃ¡ÂºÂ¡i, chÃ¡Â»â€° trÃ¡ÂºÂ£ vÃ¡Â»Â mÃ¡Â»Â©c hiÃ¡Â»â€¡n tÃ¡ÂºÂ¡i.
             if (inventoryAllotDetailRepository.existsByTicketDetailIdAndType(ticketDetailId, TYPE_ALLOT)) {
                 log.info("Stock already initialized for ticketDetailId={}, skipping ALLOT", ticketDetailId);
                 rehydrateRedisFromDb(ticketDetailId);
                 return buildStockLevelFromDb(ticketDetailId);
             }
 
-            // Ghi bản ghi ALLOT vào DB (sổ cái sự thật)
+            // Ghi bÃ¡ÂºÂ£n ghi ALLOT vÃƒÂ o DB (sÃ¡Â»â€¢ cÃƒÂ¡i sÃ¡Â»Â± thÃ¡ÂºÂ­t)
             InventoryAllotDetailEntity allot = InventoryAllotDetailEntity.builder()
                     .orderId("INIT-" + ticketDetailId)
                     .ticketDetailId(ticketDetailId)
@@ -129,7 +129,7 @@ public class InventoryServiceImpl implements InventoryService {
                     .build();
             inventoryAllotDetailRepository.save(allot);
 
-            // Khởi tạo Redis từ DB (total + available)
+            // KhÃ¡Â»Å¸i tÃ¡ÂºÂ¡o Redis tÃ¡Â»Â« DB (total + available)
             rehydrateRedisFromDb(ticketDetailId);
 
             log.info("Stock initialized: ticketDetailId={}, totalStock={}", ticketDetailId, totalStock);
@@ -140,9 +140,9 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Đặt trước (reserve) tồn kho cho một đơn hàng.
-     * Sử dụng Redis distributed lock để đảm bảo concurrency control.
-     * Idempotency: kiểm tra orderId + ticketDetailId đã xử lý chưa.
+     * Ã„ÂÃ¡ÂºÂ·t trÃ†Â°Ã¡Â»â€ºc (reserve) tÃ¡Â»â€œn kho cho mÃ¡Â»â„¢t Ã„â€˜Ã†Â¡n hÃƒÂ ng.
+     * SÃ¡Â»Â­ dÃ¡Â»Â¥ng Redis distributed lock Ã„â€˜Ã¡Â»Æ’ Ã„â€˜Ã¡ÂºÂ£m bÃ¡ÂºÂ£o concurrency control.
+     * Idempotency: kiÃ¡Â»Æ’m tra orderId + ticketDetailId Ã„â€˜ÃƒÂ£ xÃ¡Â»Â­ lÃƒÂ½ chÃ†Â°a.
      */
     @Override
     @Transactional
@@ -151,7 +151,7 @@ public class InventoryServiceImpl implements InventoryService {
         String orderId = request.getOrderId();
         Integer quantity = request.getQuantity();
 
-        // Idempotency check: nếu đã xử lý rồi thì trả về kết quả cũ
+        // Idempotency check: nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂ£ xÃ¡Â»Â­ lÃƒÂ½ rÃ¡Â»â€œi thÃƒÂ¬ trÃ¡ÂºÂ£ vÃ¡Â»Â kÃ¡ÂºÂ¿t quÃ¡ÂºÂ£ cÃ…Â©
         Optional<InventoryAllotDetailEntity> existing =
                 inventoryAllotDetailRepository.findByOrderIdAndTicketDetailId(orderId, ticketDetailId);
         if (existing.isPresent()) {
@@ -167,8 +167,9 @@ public class InventoryServiceImpl implements InventoryService {
                     .build();
         }
 
-        // Acquire distributed lock (owner-safe: dùng token + Lua script khi trả khóa)
-        String lockKey = LOCK_KEY_PREFIX + ticketDetailId;
+        // Acquire distributed lock (owner-safe token release)
+        int bucketIndex = selectBucketIndex(ticketDetailId, orderId);
+        String lockKey = buildBucketLockKey(ticketDetailId, bucketIndex);
         String lockToken = lockService.tryAcquire(lockKey, LOCK_TIMEOUT);
 
         if (lockToken == null) {
@@ -176,15 +177,21 @@ public class InventoryServiceImpl implements InventoryService {
         }
 
         try {
-            // Check available stock from Redis. Nếu key chưa có (Redis vừa khởi động/bị xóa),
-            // tự phục hồi từ DB - DB là sổ cái sự thật.
-            String availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
+            // Check available stock from Redis. NÃ¡ÂºÂ¿u key chÃ†Â°a cÃƒÂ³ (Redis vÃ¡Â»Â«a khÃ¡Â»Å¸i Ã„â€˜Ã¡Â»â„¢ng/bÃ¡Â»â€¹ xÃƒÂ³a),
+            // tÃ¡Â»Â± phÃ¡Â»Â¥c hÃ¡Â»â€œi tÃ¡Â»Â« DB - DB lÃƒÂ  sÃ¡Â»â€¢ cÃƒÂ¡i sÃ¡Â»Â± thÃ¡ÂºÂ­t.
+            String bucketKey = buildBucketAvailableKey(ticketDetailId, bucketIndex);
+            String availableStr = redisTemplate.opsForValue().get(bucketKey);
             if (availableStr == null) {
-                log.info("Available stock key missing for ticketDetailId={}, rehydrating from DB", ticketDetailId);
+                log.info("Available stock key missing for ticketDetailId={}, bucketIndex={}, rehydrating from DB",
+                        ticketDetailId, bucketIndex);
                 rehydrateRedisFromDb(ticketDetailId);
-                availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
+                availableStr = redisTemplate.opsForValue().get(bucketKey);
             }
             int availableStock = availableStr != null ? Integer.parseInt(availableStr) : 0;
+
+            if (availableStock < quantity) {
+                availableStock = backSourceIfNeeded(ticketDetailId, bucketIndex, availableStock);
+            }
 
             if (availableStock < quantity) {
                 log.warn("Insufficient stock: ticketDetailId={}, available={}, requested={}",
@@ -200,7 +207,7 @@ public class InventoryServiceImpl implements InventoryService {
 
             // Decrement available stock atomically in Redis
             Long newAvailable = redisTemplate.opsForValue()
-                    .decrement(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, quantity);
+                    .decrement(bucketKey, quantity);
 
             // Persist the reservation record
             InventoryAllotDetailEntity allotDetail = InventoryAllotDetailEntity.builder()
@@ -226,14 +233,14 @@ public class InventoryServiceImpl implements InventoryService {
                     .remainingStock(remainingStock)
                     .build();
         } finally {
-            // Release the distributed lock (chỉ xóa nếu đúng chủ sở hữu)
+            // Release the distributed lock (chÃ¡Â»â€° xÃƒÂ³a nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂºng chÃ¡Â»Â§ sÃ¡Â»Å¸ hÃ¡Â»Â¯u)
             lockService.release(lockKey, lockToken);
         }
     }
 
     /**
-     * Giải phóng (release) tồn kho đã đặt trước - compensation action khi đơn hàng bị hủy.
-     * Sử dụng Redis distributed lock để đảm bảo concurrency control.
+     * GiÃ¡ÂºÂ£i phÃƒÂ³ng (release) tÃ¡Â»â€œn kho Ã„â€˜ÃƒÂ£ Ã„â€˜Ã¡ÂºÂ·t trÃ†Â°Ã¡Â»â€ºc - compensation action khi Ã„â€˜Ã†Â¡n hÃƒÂ ng bÃ¡Â»â€¹ hÃ¡Â»Â§y.
+     * SÃ¡Â»Â­ dÃ¡Â»Â¥ng Redis distributed lock Ã„â€˜Ã¡Â»Æ’ Ã„â€˜Ã¡ÂºÂ£m bÃ¡ÂºÂ£o concurrency control.
      */
     @Override
     @Transactional
@@ -243,7 +250,8 @@ public class InventoryServiceImpl implements InventoryService {
         Integer quantity = request.getQuantity();
 
         // Acquire distributed lock (owner-safe)
-        String lockKey = LOCK_KEY_PREFIX + ticketDetailId;
+        int bucketIndex = selectBucketIndex(ticketDetailId, orderId);
+        String lockKey = buildBucketLockKey(ticketDetailId, bucketIndex);
         String lockToken = lockService.tryAcquire(lockKey, LOCK_TIMEOUT);
 
         if (lockToken == null) {
@@ -252,7 +260,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         try {
             // Increment available stock in Redis
-            redisTemplate.opsForValue().increment(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, quantity);
+            redisTemplate.opsForValue().increment(buildBucketAvailableKey(ticketDetailId, bucketIndex), quantity);
 
             // Persist the release record
             InventoryAllotDetailEntity releaseDetail = InventoryAllotDetailEntity.builder()
@@ -269,21 +277,30 @@ public class InventoryServiceImpl implements InventoryService {
             log.info("Stock released (compensation): orderId={}, ticketDetailId={}, quantity={}",
                     orderId, ticketDetailId, quantity);
         } finally {
-            // Release the distributed lock (chỉ xóa nếu đúng chủ sở hữu)
+            // Release the distributed lock (chÃ¡Â»â€° xÃƒÂ³a nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂºng chÃ¡Â»Â§ sÃ¡Â»Å¸ hÃ¡Â»Â¯u)
             lockService.release(lockKey, lockToken);
         }
     }
 
     /**
-     * Lấy danh sách tất cả cấu hình phân mảnh tồn kho đang hoạt động (delFlag=0).
+     * LÃ¡ÂºÂ¥y danh sÃƒÂ¡ch tÃ¡ÂºÂ¥t cÃ¡ÂºÂ£ cÃ¡ÂºÂ¥u hÃƒÂ¬nh phÃƒÂ¢n mÃ¡ÂºÂ£nh tÃ¡Â»â€œn kho Ã„â€˜ang hoÃ¡ÂºÂ¡t Ã„â€˜Ã¡Â»â„¢ng (delFlag=0).
      */
     @Override
     public List<InventoryBucketConfigEntity> getAllBucketConfigs() {
         return inventoryBucketConfigRepository.findByDelFlag(0);
     }
 
+    @Override
+    public void reconcileAllStockToRedis() {
+        List<Long> ticketDetailIds = inventoryAllotDetailRepository.findDistinctActiveTicketDetailIds();
+        for (Long ticketDetailId : ticketDetailIds) {
+            rehydrateRedisFromDb(ticketDetailId);
+        }
+        log.info("Reconciled inventory stock to Redis for {} ticketDetailId(s)", ticketDetailIds.size());
+    }
+
     /**
-     * Tạo mới một cấu hình phân mảnh tồn kho.
+     * TÃ¡ÂºÂ¡o mÃ¡Â»â€ºi mÃ¡Â»â„¢t cÃ¡ÂºÂ¥u hÃƒÂ¬nh phÃƒÂ¢n mÃ¡ÂºÂ£nh tÃ¡Â»â€œn kho.
      */
     @Override
     @Transactional
@@ -308,20 +325,138 @@ public class InventoryServiceImpl implements InventoryService {
     // ==================== Private Helper Methods ====================
 
     /**
-     * Nạp lại (rehydrate) các key tồn kho trên Redis từ DB.
-     * Dùng khi khởi tạo hoặc khi phát hiện cache trống - đảm bảo Redis khớp sổ cái DB.
+     * NÃ¡ÂºÂ¡p lÃ¡ÂºÂ¡i (rehydrate) cÃƒÂ¡c key tÃ¡Â»â€œn kho trÃƒÂªn Redis tÃ¡Â»Â« DB.
+     * DÃƒÂ¹ng khi khÃ¡Â»Å¸i tÃ¡ÂºÂ¡o hoÃ¡ÂºÂ·c khi phÃƒÂ¡t hiÃ¡Â»â€¡n cache trÃ¡Â»â€˜ng - Ã„â€˜Ã¡ÂºÂ£m bÃ¡ÂºÂ£o Redis khÃ¡Â»â€ºp sÃ¡Â»â€¢ cÃƒÂ¡i DB.
      */
     private void rehydrateRedisFromDb(Long ticketDetailId) {
         int total = calculateTotalStockFromDb(ticketDetailId);
         int available = calculateAvailableStockFromDb(ticketDetailId);
         redisTemplate.opsForValue().set(STOCK_CACHE_KEY_PREFIX + ticketDetailId, String.valueOf(total));
-        redisTemplate.opsForValue().set(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, String.valueOf(available));
+        writeAvailableStockToRedis(ticketDetailId, available);
         log.debug("Rehydrated Redis from DB: ticketDetailId={}, total={}, available={}",
                 ticketDetailId, total, available);
     }
 
+    private int readAvailableStockFromRedis(Long ticketDetailId, int fallbackTotal) {
+        int bucketCount = getBucketCount();
+        if (bucketCount <= 1) {
+            String availableStr = redisTemplate.opsForValue().get(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId);
+            return availableStr != null ? Integer.parseInt(availableStr) : fallbackTotal;
+        }
+
+        int totalAvailable = 0;
+        for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++) {
+            String bucketValue = redisTemplate.opsForValue().get(buildBucketAvailableKey(ticketDetailId, bucketIndex));
+            totalAvailable += bucketValue != null ? Integer.parseInt(bucketValue) : 0;
+        }
+        return totalAvailable;
+    }
+
+    private void writeAvailableStockToRedis(Long ticketDetailId, int totalAvailable) {
+        int bucketCount = getBucketCount();
+        if (bucketCount <= 1) {
+            redisTemplate.opsForValue().set(STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId, String.valueOf(totalAvailable));
+            return;
+        }
+
+        List<Integer> bucketStocks = splitStockAcrossBuckets(totalAvailable, bucketCount);
+        for (int bucketIndex = 0; bucketIndex < bucketStocks.size(); bucketIndex++) {
+            redisTemplate.opsForValue().set(
+                    buildBucketAvailableKey(ticketDetailId, bucketIndex),
+                    String.valueOf(bucketStocks.get(bucketIndex))
+            );
+        }
+    }
+
+    private List<Integer> splitStockAcrossBuckets(int totalStock, int bucketCount) {
+        List<Integer> allocations = new ArrayList<>();
+        int base = totalStock / bucketCount;
+        int remainder = totalStock % bucketCount;
+        for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++) {
+            allocations.add(base + (bucketIndex < remainder ? 1 : 0));
+        }
+        return allocations;
+    }
+
+    private int getBucketCount() {
+        Optional<InventoryBucketConfigEntity> config = inventoryBucketConfigRepository.findByIsDefaultTrue();
+        return config
+                .map(InventoryBucketConfigEntity::getBucketNum)
+                .filter(bucketNum -> bucketNum != null && bucketNum > 1)
+                .orElse(DEFAULT_BUCKET_NUM);
+    }
+
+    private int selectBucketIndex(Long ticketDetailId, String orderId) {
+        int bucketCount = getBucketCount();
+        if (bucketCount <= 1) {
+            return 0;
+        }
+        return Math.floorMod(orderId.hashCode(), bucketCount);
+    }
+
+    private String buildBucketAvailableKey(Long ticketDetailId, int bucketIndex) {
+        if (getBucketCount() <= 1) {
+            return STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId;
+        }
+        return STOCK_AVAILABLE_KEY_PREFIX + ticketDetailId + ":" + bucketIndex;
+    }
+
+    private String buildBucketLockKey(Long ticketDetailId, int bucketIndex) {
+        if (getBucketCount() <= 1) {
+            return LOCK_KEY_PREFIX + ticketDetailId;
+        }
+        return LOCK_KEY_PREFIX + ticketDetailId + ":" + bucketIndex;
+    }
+
+    private int backSourceIfNeeded(Long ticketDetailId, int bucketIndex, int currentAvailable) {
+        Optional<InventoryBucketConfigEntity> optionalConfig = inventoryBucketConfigRepository.findByIsDefaultTrue();
+        if (optionalConfig.isEmpty()) {
+            return currentAvailable;
+        }
+        InventoryBucketConfigEntity config = optionalConfig.get();
+        if (config.getBucketNum() == null || config.getBucketNum() <= 1
+                || config.getThresholdValue() == null || currentAvailable > config.getThresholdValue()) {
+            return currentAvailable;
+        }
+
+        int donorBucketIndex = findDonorBucketIndex(ticketDetailId, bucketIndex, config);
+        if (donorBucketIndex < 0) {
+            return currentAvailable;
+        }
+
+        String donorKey = buildBucketAvailableKey(ticketDetailId, donorBucketIndex);
+        String targetKey = buildBucketAvailableKey(ticketDetailId, bucketIndex);
+        String donorValue = redisTemplate.opsForValue().get(donorKey);
+        int donorAvailable = donorValue != null ? Integer.parseInt(donorValue) : 0;
+        int transferAmount = Math.min(config.getBackSourceStep(), donorAvailable);
+        if (transferAmount <= 0) {
+            return currentAvailable;
+        }
+
+        redisTemplate.opsForValue().decrement(donorKey, transferAmount);
+        Long newTarget = redisTemplate.opsForValue().increment(targetKey, transferAmount);
+        log.info("Back-sourced stock: ticketDetailId={}, fromBucket={}, toBucket={}, amount={}",
+                ticketDetailId, donorBucketIndex, bucketIndex, transferAmount);
+        return newTarget != null ? newTarget.intValue() : currentAvailable + transferAmount;
+    }
+
+    private int findDonorBucketIndex(Long ticketDetailId, int targetBucketIndex, InventoryBucketConfigEntity config) {
+        int minRemaining = config.getMinDepthNum() != null ? config.getMinDepthNum() : 0;
+        for (int bucketIndex = 0; bucketIndex < config.getBucketNum(); bucketIndex++) {
+            if (bucketIndex == targetBucketIndex) {
+                continue;
+            }
+            String bucketValue = redisTemplate.opsForValue().get(buildBucketAvailableKey(ticketDetailId, bucketIndex));
+            int available = bucketValue != null ? Integer.parseInt(bucketValue) : 0;
+            if (available - minRemaining > 0) {
+                return bucketIndex;
+            }
+        }
+        return -1;
+    }
+
     /**
-     * Dựng StockLevelResponse trực tiếp từ DB (không phụ thuộc Redis).
+     * DÃ¡Â»Â±ng StockLevelResponse trÃ¡Â»Â±c tiÃ¡ÂºÂ¿p tÃ¡Â»Â« DB (khÃƒÂ´ng phÃ¡Â»Â¥ thuÃ¡Â»â„¢c Redis).
      */
     private StockLevelResponse buildStockLevelFromDb(Long ticketDetailId) {
         int total = calculateTotalStockFromDb(ticketDetailId);
@@ -336,19 +471,19 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Tính tổng tồn kho từ DB (sổ cái sự thật).
-     * Tổng tồn kho = tổng các bản ghi ALLOT (số vé được nạp vào khi mở bán).
+     * TÃƒÂ­nh tÃ¡Â»â€¢ng tÃ¡Â»â€œn kho tÃ¡Â»Â« DB (sÃ¡Â»â€¢ cÃƒÂ¡i sÃ¡Â»Â± thÃ¡ÂºÂ­t).
+     * TÃ¡Â»â€¢ng tÃ¡Â»â€œn kho = tÃ¡Â»â€¢ng cÃƒÂ¡c bÃ¡ÂºÂ£n ghi ALLOT (sÃ¡Â»â€˜ vÃƒÂ© Ã„â€˜Ã†Â°Ã¡Â»Â£c nÃ¡ÂºÂ¡p vÃƒÂ o khi mÃ¡Â»Å¸ bÃƒÂ¡n).
      */
     private int calculateTotalStockFromDb(Long ticketDetailId) {
         return (int) inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_ALLOT);
     }
 
     /**
-     * Tính tồn kho khả dụng từ DB: ALLOT - RESERVE + RELEASE.
+     * TÃƒÂ­nh tÃ¡Â»â€œn kho khÃ¡ÂºÂ£ dÃ¡Â»Â¥ng tÃ¡Â»Â« DB: ALLOT - RESERVE + RELEASE.
      * <ul>
-     *   <li>ALLOT: số vé nạp vào khi mở bán</li>
-     *   <li>RESERVE: số vé đã giữ (trừ đi)</li>
-     *   <li>RELEASE: số vé được trả lại do hủy/bù trừ (cộng lại)</li>
+     *   <li>ALLOT: sÃ¡Â»â€˜ vÃƒÂ© nÃ¡ÂºÂ¡p vÃƒÂ o khi mÃ¡Â»Å¸ bÃƒÂ¡n</li>
+     *   <li>RESERVE: sÃ¡Â»â€˜ vÃƒÂ© Ã„â€˜ÃƒÂ£ giÃ¡Â»Â¯ (trÃ¡Â»Â« Ã„â€˜i)</li>
+     *   <li>RELEASE: sÃ¡Â»â€˜ vÃƒÂ© Ã„â€˜Ã†Â°Ã¡Â»Â£c trÃ¡ÂºÂ£ lÃ¡ÂºÂ¡i do hÃ¡Â»Â§y/bÃƒÂ¹ trÃ¡Â»Â« (cÃ¡Â»â„¢ng lÃ¡ÂºÂ¡i)</li>
      * </ul>
      */
     private int calculateAvailableStockFromDb(Long ticketDetailId) {
@@ -360,7 +495,7 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Sinh mã nghiệp vụ duy nhất cho bản ghi phân bổ (idempotency key).
+     * Sinh mÃƒÂ£ nghiÃ¡Â»â€¡p vÃ¡Â»Â¥ duy nhÃ¡ÂºÂ¥t cho bÃ¡ÂºÂ£n ghi phÃƒÂ¢n bÃ¡Â»â€¢ (idempotency key).
      * Format: {orderId}-{ticketDetailId}-{uuid_short}
      */
     private String generateInventorNo(String orderId, Long ticketDetailId) {

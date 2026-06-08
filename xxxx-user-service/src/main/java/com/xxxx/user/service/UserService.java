@@ -10,9 +10,9 @@ import com.xxxx.user.controller.dto.response.UserResponse;
 
 public interface UserService {
 
-    LoginResponse login(LoginRequest request);
+    LoginResponse login(LoginRequest request, String clientIp);
 
-    TokenResponse refresh(RefreshTokenRequest request);
+    TokenResponse refresh(RefreshTokenRequest request, String clientIp);
 
     void logout(LogoutRequest request);
 

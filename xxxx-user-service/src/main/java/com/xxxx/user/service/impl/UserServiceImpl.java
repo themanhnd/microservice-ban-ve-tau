@@ -12,6 +12,7 @@ import com.xxxx.user.repository.UserRepository;
 import com.xxxx.user.repository.entity.UserEntity;
 import com.xxxx.user.security.JwtTokenService;
 import com.xxxx.user.security.PasswordHashService;
+import com.xxxx.user.security.AuthRateLimitService;
 import com.xxxx.user.security.RefreshTokenService;
 import com.xxxx.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -30,10 +31,12 @@ public class UserServiceImpl implements UserService {
     private final JwtTokenService jwtTokenService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordHashService passwordHashService;
+    private final AuthRateLimitService authRateLimitService;
 
     @Override
     @Transactional
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, String clientIp) {
+        authRateLimitService.check("login", request.getUsername(), clientIp);
         UserEntity user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new UnauthorizedException("Invalid username or password"));
 
@@ -64,7 +67,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public TokenResponse refresh(RefreshTokenRequest request) {
+    public TokenResponse refresh(RefreshTokenRequest request, String clientIp) {
+        authRateLimitService.check("refresh", "token", clientIp);
         UserEntity user = refreshTokenService.consume(request.getRefreshToken());
         String accessToken = jwtTokenService.generateAccessToken(user);
         String refreshToken = refreshTokenService.issue(user);

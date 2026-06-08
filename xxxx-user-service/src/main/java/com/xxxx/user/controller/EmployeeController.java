@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +27,7 @@ public class EmployeeController {
 
     @Operation(summary = "List all employees", description = "Retrieve all employees")
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<EmployeeResponse>> getAllEmployees() {
         log.info("Fetching all employees");
         List<EmployeeResponse> response = employeeService.getAllEmployees();
@@ -34,6 +36,7 @@ public class EmployeeController {
 
     @Operation(summary = "Get employee by ID", description = "Retrieve employee information by ID")
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<EmployeeResponse> getEmployeeById(
             @Parameter(description = "Employee ID") @PathVariable Long id) {
         log.info("Fetching employee by id: {}", id);
@@ -43,6 +46,7 @@ public class EmployeeController {
 
     @Operation(summary = "Create employee", description = "Create a new employee")
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<EmployeeResponse> createEmployee(
             @Valid @RequestBody CreateEmployeeRequest request) {
         log.info("Creating employee: {}", request.getName());
@@ -52,6 +56,7 @@ public class EmployeeController {
 
     @Operation(summary = "Update employee", description = "Update an existing employee")
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<EmployeeResponse> updateEmployee(
             @Parameter(description = "Employee ID") @PathVariable Long id,
             @Valid @RequestBody UpdateEmployeeRequest request) {
@@ -62,6 +67,7 @@ public class EmployeeController {
 
     @Operation(summary = "Delete employee", description = "Delete an employee by ID")
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<String> deleteEmployee(
             @Parameter(description = "Employee ID") @PathVariable Long id) {
         log.info("Deleting employee id: {}", id);

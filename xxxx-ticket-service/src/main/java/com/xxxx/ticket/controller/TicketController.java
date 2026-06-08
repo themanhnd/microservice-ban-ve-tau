@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,6 +44,7 @@ public class TicketController {
 
     @Operation(summary = "Create a new ticket", description = "Create a new ticket with the provided details")
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<TicketResponse> createTicket(
             @Valid @RequestBody CreateTicketRequest request) {
         log.info("Creating ticket: {}", request.getName());
@@ -52,6 +54,7 @@ public class TicketController {
 
     @Operation(summary = "Update a ticket", description = "Update an existing ticket by its ID")
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<TicketResponse> updateTicket(
             @Parameter(description = "Ticket ID") @PathVariable Long id,
             @Valid @RequestBody UpdateTicketRequest request) {
@@ -62,6 +65,7 @@ public class TicketController {
 
     @Operation(summary = "Delete a ticket", description = "Soft delete a ticket by its ID")
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<String> deleteTicket(
             @Parameter(description = "Ticket ID") @PathVariable Long id) {
         log.info("Deleting ticket with id: {}", id);

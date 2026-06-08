@@ -12,3 +12,14 @@ gateway:
     issuer: ${JWT_ISSUER:xxxx-user-service}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:1800}
     refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:604800}
+
+auth:
+  bootstrap-admin:
+    enabled: ${AUTH_BOOTSTRAP_ADMIN_ENABLED:false}
+    username: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:}
+    email: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:}
+    password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:}
+    full-name: ${AUTH_BOOTSTRAP_ADMIN_FULL_NAME:Bootstrap Admin}
+  rate-limit:
+    max-attempts: ${AUTH_RATE_LIMIT_MAX_ATTEMPTS:10}
+    window-seconds: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:60}

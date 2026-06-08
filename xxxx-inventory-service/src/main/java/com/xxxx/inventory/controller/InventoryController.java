@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -39,6 +40,7 @@ public class InventoryController {
 
     @Operation(summary = "Initialize stock", description = "Nạp tồn kho ban đầu khi mở bán (idempotent)")
     @PostMapping("/stock/initialize")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<StockLevelResponse> initializeStock(
             @Valid @RequestBody InitializeStockRequest request) {
         log.info("Initializing stock for ticketDetailId: {}, totalStock: {}",
@@ -50,6 +52,7 @@ public class InventoryController {
 
     @Operation(summary = "Reserve stock", description = "Reserve stock for an order")
     @PostMapping("/reserve")
+    @PreAuthorize("authenticated()")
     public ApiResponse<ReserveStockResponse> reserveStock(
             @Valid @RequestBody ReserveStockRequest request) {
         log.info("Reserving stock for orderId: {}, ticketDetailId: {}, quantity: {}",
@@ -60,6 +63,7 @@ public class InventoryController {
 
     @Operation(summary = "Release stock", description = "Release reserved stock (compensation action)")
     @PostMapping("/release")
+    @PreAuthorize("authenticated()")
     public ApiResponse<String> releaseStock(
             @Valid @RequestBody ReleaseStockRequest request) {
         log.info("Releasing stock for orderId: {}, ticketDetailId: {}, quantity: {}",
@@ -70,6 +74,7 @@ public class InventoryController {
 
     @Operation(summary = "List bucket configs", description = "Get all inventory bucket configurations")
     @GetMapping("/bucket-configs")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<InventoryBucketConfigEntity>> getAllBucketConfigs() {
         log.info("Fetching all bucket configurations");
         List<InventoryBucketConfigEntity> configs = inventoryService.getAllBucketConfigs();
@@ -78,6 +83,7 @@ public class InventoryController {
 
     @Operation(summary = "Create bucket config", description = "Create a new inventory bucket configuration")
     @PostMapping("/bucket-configs")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<InventoryBucketConfigEntity> createBucketConfig(
             @Valid @RequestBody CreateBucketConfigRequest request) {
         log.info("Creating bucket config with template: {}", request.getTemplateName());

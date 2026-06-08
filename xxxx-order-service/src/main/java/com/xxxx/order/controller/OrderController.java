@@ -2,6 +2,7 @@ package com.xxxx.order.controller;
 
 import com.xxxx.common.response.ApiResponse;
 import com.xxxx.common.response.PageResponse;
+import com.xxxx.common.security.AuthenticatedUser;
 import com.xxxx.order.controller.dto.request.PlaceOrderRequest;
 import com.xxxx.order.controller.dto.response.OrderResponse;
 import com.xxxx.order.controller.dto.response.OrderStatusResponse;
@@ -12,6 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,8 +34,11 @@ public class OrderController {
 
     @Operation(summary = "Place a new order", description = "Create a new order and start the Saga orchestration flow")
     @PostMapping("/place")
+    @PreAuthorize("authenticated()")
     public ApiResponse<OrderResponse> placeOrder(
-            @Valid @RequestBody PlaceOrderRequest request) {
+            @Valid @RequestBody PlaceOrderRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        request.setUserId(String.valueOf(user.userId()));
         log.info("Placing order for userId: {}, ticketDetailId: {}, quantity: {}",
                 request.getUserId(), request.getTicketDetailId(), request.getQuantity());
         OrderResponse response = orderService.placeOrder(request);
@@ -41,6 +47,7 @@ public class OrderController {
 
     @Operation(summary = "Get order by order number", description = "Retrieve full order details by order number")
     @GetMapping("/{orderNo}")
+    @PreAuthorize("@orderAuthorization.canAccessOrder(#orderNo, authentication)")
     public ApiResponse<OrderResponse> getOrderByOrderNo(
             @Parameter(description = "Order number") @PathVariable String orderNo) {
         log.info("Getting order by orderNo: {}", orderNo);
@@ -50,6 +57,7 @@ public class OrderController {
 
     @Operation(summary = "Get order status", description = "Get lightweight order status by order number")
     @GetMapping("/status/{orderNo}")
+    @PreAuthorize("@orderAuthorization.canAccessOrder(#orderNo, authentication)")
     public ApiResponse<OrderStatusResponse> getOrderStatus(
             @Parameter(description = "Order number") @PathVariable String orderNo) {
         log.info("Getting order status for orderNo: {}", orderNo);
@@ -59,6 +67,7 @@ public class OrderController {
 
     @Operation(summary = "Get orders by user", description = "Get paginated list of orders for a specific user")
     @GetMapping("/user/{userId}")
+    @PreAuthorize("@orderAuthorization.canAccessUserOrders(#userId, authentication)")
     public PageResponse<List<OrderResponse>> getOrdersByUserId(
             @Parameter(description = "User ID") @PathVariable String userId,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
@@ -69,6 +78,7 @@ public class OrderController {
 
     @Operation(summary = "Cancel order", description = "Cancel an order and trigger compensation if needed")
     @DeleteMapping("/{orderNo}")
+    @PreAuthorize("@orderAuthorization.canAccessOrder(#orderNo, authentication)")
     public ApiResponse<String> cancelOrder(
             @Parameter(description = "Order number") @PathVariable String orderNo) {
         log.info("Cancelling order: {}", orderNo);

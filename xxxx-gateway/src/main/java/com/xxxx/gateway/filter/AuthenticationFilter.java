@@ -21,7 +21,6 @@ import reactor.core.publisher.Mono;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Global filter that validates JWT tokens from the Authorization header.
@@ -68,12 +67,14 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
         try {
             Claims claims = validateToken(token);
-            if (requiresAdminRole(request) && !hasRole(claims.get("roles", String.class), "ADMIN")) {
-                return onForbidden(exchange, "Insufficient permissions");
-            }
-
-            // Extract user info and pass as headers to downstream services
+            // Strip spoofed identity headers from client, then add verified metadata for logs/debug.
+            // Authorization itself is forwarded unchanged and services verify JWT again.
             ServerHttpRequest mutatedRequest = request.mutate()
+                    .headers(headers -> {
+                        headers.remove(X_USER_ID);
+                        headers.remove(X_USER_EMAIL);
+                        headers.remove(X_USER_ROLES);
+                    })
                     .header(X_USER_ID, claims.getSubject())
                     .header(X_USER_EMAIL, claims.get("email", String.class))
                     .header(X_USER_ROLES, claims.get("roles", String.class))
@@ -115,41 +116,6 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
                 .getPayload();
     }
 
-    private boolean requiresAdminRole(ServerHttpRequest request) {
-        String method = request.getMethod().name();
-        String path = request.getURI().getPath();
-
-        if (path.startsWith("/api/employees")) {
-            return true;
-        }
-
-        if (isMutatingMethod(method) && (path.startsWith("/api/events")
-                || path.startsWith("/api/tickets")
-                || path.startsWith("/api/ticket-details")
-                || path.startsWith("/api/inventory"))) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private boolean isMutatingMethod(String method) {
-        return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method) || "DELETE".equals(method);
-    }
-
-    private boolean hasRole(String rolesClaim, String expectedRole) {
-        if (rolesClaim == null || rolesClaim.isBlank()) {
-            return false;
-        }
-        String normalizedExpectedRole = expectedRole.toUpperCase(Locale.ROOT);
-        for (String role : rolesClaim.split(",")) {
-            if (normalizedExpectedRole.equals(role.trim().toUpperCase(Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private Mono<Void> onUnauthorized(ServerWebExchange exchange, String message) {
         log.debug("Unauthorized request: {}", message);
         ServerHttpResponse response = exchange.getResponse();
@@ -157,20 +123,6 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         response.getHeaders().add("Content-Type", "application/json");
         String body = String.format(
                 "{\"success\":false,\"code\":\"401\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
-                message, java.time.LocalDateTime.now()
-        );
-        org.springframework.core.io.buffer.DataBuffer buffer =
-                response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
-        return response.writeWith(Mono.just(buffer));
-    }
-
-    private Mono<Void> onForbidden(ServerWebExchange exchange, String message) {
-        log.debug("Forbidden request: {}", message);
-        ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.FORBIDDEN);
-        response.getHeaders().add("Content-Type", "application/json");
-        String body = String.format(
-                "{\"success\":false,\"code\":\"403\",\"message\":\"%s\",\"timestamp\":\"%s\"}",
                 message, java.time.LocalDateTime.now()
         );
         org.springframework.core.io.buffer.DataBuffer buffer =

@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Response DTO cho thông tin đơn hàng đầy đủ.
+ * Response DTO cho thong tin don hang day du.
  */
 @Data
 @Builder
@@ -24,39 +24,48 @@ public class OrderResponse {
     @Schema(description = "Order ID", example = "1")
     private Long id;
 
-    @Schema(description = "Mã đơn hàng duy nhất", example = "ORD-20250613-ABC123")
+    @Schema(description = "Unique order number", example = "ORD-20250613-ABC123")
     private String orderNo;
 
-    @Schema(description = "ID người dùng đặt hàng", example = "user-123")
+    @Schema(description = "User ID", example = "user-123")
     private String userId;
 
-    @Schema(description = "ID chi tiết vé", example = "1")
+    @Schema(description = "Ticket detail ID", example = "1")
     private Long ticketDetailId;
 
-    @Schema(description = "Số lượng vé đặt", example = "2")
+    @Schema(description = "Order quantity", example = "2")
     private Integer quantity;
 
-    @Schema(description = "Tổng số tiền đơn hàng", example = "500000.00")
+    @Schema(description = "Total amount", example = "500000.00")
     private BigDecimal totalAmount;
 
-    @Schema(description = "Trạng thái đơn hàng", example = "PENDING")
+    @Schema(description = "Order status", example = "PENDING")
     private String status;
 
-    @Schema(description = "Trạng thái saga", example = "STARTED")
+    @Schema(description = "Saga status", example = "STARTED")
     private String sagaStatus;
 
-    @Schema(description = "ID giao dịch thanh toán", example = "TXN-123456")
+    @Schema(description = "Payment transaction ID", example = "TXN-123456")
     private String paymentTransactionId;
 
-    @Schema(description = "Correlation ID cho distributed tracing", example = "corr-abc-123")
+    @Schema(description = "Correlation ID", example = "corr-abc-123")
     private String correlationId;
 
-    @Schema(description = "Lý do thất bại/hủy đơn hàng")
+    @Schema(description = "Failure reason")
     private String failureReason;
 
-    @Schema(description = "Thời gian tạo đơn hàng")
+    @Schema(description = "Queue token for waiting room")
+    private String queueToken;
+
+    @Schema(description = "Queue status", example = "WAITING")
+    private String queueStatus;
+
+    @Schema(description = "Estimated queue position", example = "4")
+    private Integer queuePosition;
+
+    @Schema(description = "Created time")
     private LocalDateTime createdAt;
 
-    @Schema(description = "Thời gian cập nhật gần nhất")
+    @Schema(description = "Last updated time")
     private LocalDateTime updatedAt;
 }

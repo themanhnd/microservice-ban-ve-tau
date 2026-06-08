@@ -2,6 +2,7 @@ services:
   # ==================== Infrastructure ====================
 
   mysql:
+    profiles: ["infra"]
     image: mysql:8.0
     container_name: xxxx-mysql
     environment:
@@ -19,6 +20,7 @@ services:
       - xxxx-network
 
   redis:
+    profiles: ["infra"]
     image: redis:7-alpine
     container_name: xxxx-redis
     volumes:
@@ -32,6 +34,7 @@ services:
       - xxxx-network
 
   zookeeper:
+    profiles: ["infra"]
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: xxxx-zookeeper
     environment:
@@ -48,6 +51,7 @@ services:
       - xxxx-network
 
   kafka:
+    profiles: ["infra"]
     image: confluentinc/cp-kafka:7.5.0
     container_name: xxxx-kafka
     environment:
@@ -75,6 +79,7 @@ services:
   # ==================== Observability ====================
 
   prometheus:
+    profiles: ["observability"]
     image: prom/prometheus:v2.47.0
     container_name: xxxx-prometheus
     volumes:
@@ -89,6 +94,7 @@ services:
       - xxxx-network
 
   grafana:
+    profiles: ["observability"]
     image: grafana/grafana:10.1.0
     container_name: xxxx-grafana
     environment:
@@ -109,6 +115,7 @@ services:
       - xxxx-network
 
   elasticsearch:
+    profiles: ["observability"]
     image: docker.elastic.co/elasticsearch/elasticsearch:8.10.2
     container_name: xxxx-elasticsearch
     environment:
@@ -126,6 +133,7 @@ services:
       - xxxx-network
 
   logstash:
+    profiles: ["observability"]
     image: docker.elastic.co/logstash/logstash:8.10.2
     container_name: xxxx-logstash
     environment:
@@ -144,6 +152,7 @@ services:
       - xxxx-network
 
   kibana:
+    profiles: ["observability"]
     image: docker.elastic.co/kibana/kibana:8.10.2
     container_name: xxxx-kibana
     environment:
@@ -160,6 +169,7 @@ services:
       - xxxx-network
 
   zipkin:
+    profiles: ["observability"]
     image: openzipkin/zipkin:latest
     container_name: xxxx-zipkin
     environment:
@@ -179,6 +189,7 @@ services:
   # ==================== Infrastructure Services ====================
 
   discovery:
+    profiles: ["platform"]
     build:
       context: ./xxxx-discovery
       dockerfile: Dockerfile
@@ -194,6 +205,7 @@ services:
       - xxxx-network
 
   config:
+    profiles: ["platform"]
     build:
       context: ./xxxx-config
       dockerfile: Dockerfile
@@ -216,6 +228,7 @@ services:
       - xxxx-network
 
   gateway:
+    profiles: ["platform"]
     build:
       context: ./xxxx-gateway
       dockerfile: Dockerfile
@@ -245,6 +258,7 @@ services:
   # ==================== Business Services ====================
 
   booking-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-booking-service
       dockerfile: Dockerfile
@@ -273,6 +287,7 @@ services:
       - xxxx-network
 
   order-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-order-service
       dockerfile: Dockerfile
@@ -301,6 +316,7 @@ services:
       - xxxx-network
 
   payment-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-payment-service
       dockerfile: Dockerfile
@@ -333,6 +349,7 @@ services:
       - xxxx-network
 
   ticket-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-ticket-service
       dockerfile: Dockerfile
@@ -359,6 +376,7 @@ services:
       - xxxx-network
 
   inventory-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-inventory-service
       dockerfile: Dockerfile
@@ -387,6 +405,7 @@ services:
       - xxxx-network
 
   user-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-user-service
       dockerfile: Dockerfile
@@ -414,6 +433,7 @@ services:
       - xxxx-network
 
   event-service:
+    profiles: ["business"]
     build:
       context: ./xxxx-event-service
       dockerfile: Dockerfile

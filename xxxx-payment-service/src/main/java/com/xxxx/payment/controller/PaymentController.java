@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -76,6 +77,7 @@ public class PaymentController {
      */
     @GetMapping("/{transactionId}")
     @Operation(summary = "Get payment status", description = "Query payment transaction status by transaction ID")
+    @PreAuthorize("@paymentAuthorization.canAccessTransaction(#transactionId, authentication)")
     public ResponseEntity<ApiResponse<PaymentStatusResponse>> getPaymentStatus(
             @PathVariable String transactionId) {
         log.info("Getting payment status for transactionId={}", transactionId);

@@ -125,6 +125,18 @@ flowchart LR
     E -.can.-> B
 ```
 
+### Docker Compose profiles
+
+De may dev nhe hon va de tach ro surface khi deploy, `docker-compose.yml` da duoc chia theo 4 profile:
+
+- `infra`: MySQL, Redis, Zookeeper, Kafka.
+- `platform`: discovery, config, gateway.
+- `business`: cac service nghiep vu.
+- `observability`: Prometheus, Grafana, ELK, Zipkin.
+
+Kieu tach nay giup local dev co the chi bat `infra` hoac `infra + platform`, trong khi VPS co the
+bat `infra + platform + business`; observability chi bat khi can.
+
 ## 5. Vai tro cac thanh phan
 
 | Nhom | Service | Port | Vai tro |
@@ -142,6 +154,43 @@ flowchart LR
 | Ha tang | MySQL / Redis / Kafka | 3316 / 6319 / 9094 | Luu tru / cache / message bus |
 | Quan sat | Prometheus, Grafana, ELK, Zipkin | - | Metrics, log, tracing |
 
+### Ghi chu moi cho inventory-service
+
+Sau cap nhat flash sale A1, `inventory-service` khong con chi dung 1 key Redis `stock:available:{ticketDetailId}`
+cho duong giu ve hot. Neu co bucket config mac dinh, service se chia ton kho thanh nhieu bucket:
+
+- key ton kho: `stock:available:{ticketDetailId}:{bucketIndex}`
+- key khoa: `lock:inventory:{ticketDetailId}:{bucketIndex}`
+
+Bucket duoc chon theo hash `orderId`, giup cac request song song vao nhieu bucket khac nhau thay vi tranh
+nhau tren 1 hot row duy nhat. Khi bucket dang xu ly sap can, service co co che `back-source` chuyen bot ton tu
+bucket khac sang theo `thresholdValue`, `backSourceStep`, `minDepthNum` trong `InventoryBucketConfigEntity`.
+
+
+### Ghi chu moi cho auth B5
+
+Tu cap nhat B5, he thong dung mo hinh **Gateway authenticate, Service authorize**:
+
+- `xxxx-gateway` la lop xac thuc dau vao: validate chu ky JWT, issuer va expiry cho endpoint private.
+- Gateway xoa cac identity header do client tu gui (`X-User-Id`, `X-User-Email`, `X-User-Roles`) de chan gia mao quyen.
+- Gateway forward nguyen `Authorization: Bearer <token>` xuong service; `X-User-*` chi con la metadata phu cho log/debug.
+- Cac service nghiep vu tu verify JWT lai bang shared helper trong `xxxx-common`, tao principal noi bo va dung `@PreAuthorize` de quyet dinh quyen theo nghiep vu.
+- Cac rule owner/admin nam trong service: user chi xem sua tai nguyen cua minh, `ADMIN` moi duoc thao tac quan tri.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as Gateway
+    participant S as Business Service
+
+    C->>G: Authorization: Bearer JWT
+    G->>G: Validate signature/issuer/expiry
+    G->>G: Strip spoofed X-User-* headers
+    G->>S: Forward Authorization + verified metadata
+    S->>S: Verify JWT again
+    S->>S: @PreAuthorize owner/admin rule
+    S-->>C: 200 / 401 / 403
+```
 ## 6. Cau hinh tap trung (Config Server)
 
 Cac service lay cau hinh tu Config Server luc khoi dong (`spring.config.import`).
@@ -478,3 +527,24 @@ sequenceDiagram
 Day la lop phan quyen o edge. Neu muon chat hon nua cho production, buoc tiep theo nen them
 kiem tra authorization trong tung service quan trong de phong truong hop service bi goi truc tiep
 trong mang noi bo.
+
+## 11. Waiting room cho flash sale
+
+Sau cap nhat A2, `order-service` khong day thang moi request mua ve vao Saga nua. `placeOrder()` tao
+`OrderEntity` trang thai `QUEUED`, cap `queueToken`, luu `OrderQueueEntity` status `WAITING` va tra token
+cho client. Worker dinh ky trong `OrderServiceImpl.processWaitingRoomBatch()` moi lay cac item `WAITING`
+theo `priority ASC, createdAt ASC`, gioi han so item `PROCESSING` dong thoi bang
+`order.waiting-room.max-processing`, roi moi publish `OrderPlacedEvent` vao Kafka.
+
+Token cho qua lau se duoc cap nhat thanh `EXPIRED` theo `order.waiting-room.token-ttl-minutes`. Khi saga thanh
+cong hoac that bai, queue item duoc chuyen sang `COMPLETED` de dong vong doi waiting room.
+
+## 12. Auth hardening trong user-service
+
+`user-service` da bo sung 3 lop hardening nho truoc khi len VPS:
+
+- `AdminBootstrapRunner`: co the tao tai khoan `ADMIN` ban dau tu bien moi truong khi bat
+  `AUTH_BOOTSTRAP_ADMIN_ENABLED=true`.
+- `AuthRateLimitService`: gioi han tan suat cho `login` va `refresh` theo cua so thoi gian ngan de
+  giam brute-force/co gang spam refresh token.
+- Auth lifecycle tests: kiem tra duong di `login -> refresh -> logout` o tang service de tranh hoi quy.

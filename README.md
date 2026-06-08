@@ -108,15 +108,33 @@ waiting room): xem [`docs/cong-nghe-giai-thich.md`](docs/cong-nghe-giai-thich.md
 # 1. Build toàn bộ
 mvn clean package -DskipTests
 
-# 2. Dựng cả hệ thống
-docker-compose up -d
+# 2. Dựng các nhóm compose cần dùng
+docker-compose --profile infra --profile platform --profile business up -d
 
-# 3. Kiểm tra
+# 3. Nếu cần observability thì bật thêm
+docker-compose --profile observability up -d
+
+# 4. Kiểm tra
 docker-compose ps
 ```
 
 Thứ tự khởi động được Docker Compose tự xử lý qua `depends_on` + healthcheck:
 hạ tầng (MySQL/Redis/Kafka) → discovery → config → gateway → các service nghiệp vụ.
+
+Dùng profile để chạy nhẹ máy dev hơn:
+```bash
+# Chỉ hạ tầng cho local development
+docker-compose --profile infra up -d
+
+# Hạ tầng + nền tảng (discovery/config/gateway)
+docker-compose --profile infra --profile platform up -d
+
+# Full backend không observability
+docker-compose --profile infra --profile platform --profile business up -d
+
+# Bật thêm observability khi cần
+docker-compose --profile observability up -d
+```
 
 Dừng hệ thống:
 ```bash
@@ -130,7 +148,7 @@ Chỉ chạy hạ tầng bằng Docker, còn service đang sửa thì chạy b�
 
 ```bash
 # 1. Hạ tầng
-docker-compose up -d mysql redis zookeeper kafka
+docker-compose --profile infra up -d
 
 # 2. Theo thứ tự: discovery → config → gateway → service nghiệp vụ
 cd xxxx-discovery && mvn spring-boot:run
@@ -192,3 +210,15 @@ xxxx-microservices/
 ├── xxxx-discovery/ xxxx-config/ xxxx-gateway/    # Nền tảng
 └── xxxx-{user,event,ticket,inventory,order,payment,booking}-service/
 ```
+
+### Auth hardening env vars
+
+`user-service` ho tro cac bien moi de hardening auth:
+
+- `AUTH_BOOTSTRAP_ADMIN_ENABLED`
+- `AUTH_BOOTSTRAP_ADMIN_USERNAME`
+- `AUTH_BOOTSTRAP_ADMIN_EMAIL`
+- `AUTH_BOOTSTRAP_ADMIN_PASSWORD`
+- `AUTH_BOOTSTRAP_ADMIN_FULL_NAME`
+- `AUTH_RATE_LIMIT_MAX_ATTEMPTS`
+- `AUTH_RATE_LIMIT_WINDOW_SECONDS`

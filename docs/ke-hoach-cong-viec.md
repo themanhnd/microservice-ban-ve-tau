@@ -32,27 +32,27 @@
 
 ### Nhóm A — Lộ trình flash sale (đi sâu kỹ thuật tải cao)
 
-- [ ] **A1. Nối bucket vào đường giữ vé (sharding hot row)** — Ưu tiên: Trung bình
+- [x] **A1. Nối bucket vào đường giữ vé (sharding hot row)** — Ưu tiên: Trung bình
   - Mục tiêu: thay vì 1 key Redis + 1 khóa cho mỗi `ticketDetailId`, chia tồn kho thành nhiều
     bucket để nhiều request giữ vé song song không tranh nhau.
   - Việc cần làm:
-    - [ ] Chọn bucket khi giữ vé (ví dụ hash theo `orderId`/`userId` → bucket index).
-    - [ ] Key Redis theo bucket: `stock:available:{ticketDetailId}:{bucketIndex}`.
-    - [ ] Khóa theo bucket: `lock:inventory:{ticketDetailId}:{bucketIndex}`.
-    - [ ] Logic "nạp nguồn" (back-to-source) khi một bucket cạn — dùng `InventoryBucketConfigEntity`
+    - [x] Chọn bucket khi giữ vé (ví dụ hash theo `orderId`/`userId` → bucket index).
+    - [x] Key Redis theo bucket: `stock:available:{ticketDetailId}:{bucketIndex}`.
+    - [x] Khóa theo bucket: `lock:inventory:{ticketDetailId}:{bucketIndex}`.
+    - [x] Logic "nạp nguồn" (back-to-source) khi một bucket cạn — dùng `InventoryBucketConfigEntity`
           (`backSourceProportion`, `backSourceStep`, `thresholdValue`).
-    - [ ] Cập nhật `initializeStock` để chia tồn kho ban đầu vào N bucket.
-    - [ ] Unit test: giữ vé song song trên nhiều bucket, tổng không vượt tồn kho.
+    - [x] Cập nhật `initializeStock` để chia tồn kho ban đầu vào N bucket.
+    - [x] Unit test: giữ vé song song trên nhiều bucket, tổng không vượt tồn kho.
   - File liên quan: `InventoryServiceImpl`, `InventoryBucketConfigEntity`, `InventoryBucketConfigRepository`.
 
-- [ ] **A2. Kích hoạt waiting room (hàng đợi công bằng)** — Ưu tiên: Trung bình
+- [x] **A2. Kích hoạt waiting room (hàng đợi công bằng)** — Ưu tiên: Trung bình
   - Mục tiêu: khi tải cao, cấp token cho người dùng vào hàng đợi thay vì xử lý thẳng.
   - Việc cần làm:
-    - [ ] Cấp token khi user vào mua → lưu `OrderQueueEntity` (status WAITING).
-    - [ ] Worker lấy đơn từ hàng đợi theo `priority`/thứ tự, giới hạn số đơn PROCESSING đồng thời.
-    - [ ] `placeOrder()` chuyển sang mô hình "nhận token → xếp hàng" thay vì tạo đơn ngay.
-    - [ ] Cơ chế hết hạn token (status EXPIRED) cho người chờ quá lâu.
-    - [ ] Unit test cho thứ tự ưu tiên và giới hạn đồng thời.
+    - [x] Cấp token khi user vào mua → lưu `OrderQueueEntity` (status WAITING).
+    - [x] Worker lấy đơn từ hàng đợi theo `priority`/thứ tự, giới hạn số đơn PROCESSING đồng thời.
+    - [x] `placeOrder()` chuyển sang mô hình "nhận token → xếp hàng" thay vì tạo đơn ngay.
+    - [x] Cơ chế hết hạn token (status EXPIRED) cho người chờ quá lâu.
+    - [x] Unit test cho thứ tự ưu tiên và giới hạn đồng thời.
   - File liên quan: `OrderServiceImpl`, `OrderQueueEntity`, `OrderRepository`.
 
 ### Nhóm B — Bảo mật (làm TRƯỚC khi lên VPS) — Ưu tiên: CAO
@@ -71,50 +71,50 @@
   - [x] Refresh token chỉ lưu hash trong database.
   - [x] Gateway validate issuer và role.
 
-- [ ] **B4. Hardening auth tiếp theo**
-  - [ ] Thêm seed/bootstrap admin bằng biến môi trường.
-  - [ ] Thêm integration test cho login → refresh → logout.
-  - [ ] Thêm rate limit riêng cho login/refresh.
+- [x] **B4. Hardening auth tiếp theo**
+  - [x] Thêm seed/bootstrap admin bằng biến môi trường.
+  - [x] Thêm integration test cho login → refresh → logout.
+  - [x] Thêm rate limit riêng cho login/refresh.
 
 - [ ] **B5. Chuyển đúng mô hình Gateway authenticate, Service authorize** — Ưu tiên: CAO
   - Mục tiêu: gateway chỉ xác thực JWT và forward token; từng service tự verify JWT lại và tự
     quyết định quyền theo nghiệp vụ. Không phụ thuộc hoàn toàn vào rule role ở gateway.
   - Nguyên tắc:
-    - [ ] Gateway validate JWT (`signature`, `issuer`, `expiry`) cho endpoint private.
-    - [ ] Gateway strip mọi header identity do client gửi: `X-User-Id`, `X-User-Email`, `X-User-Roles`.
-    - [ ] Gateway forward nguyên `Authorization: Bearer <token>` xuống service.
-    - [ ] `X-User-*` nếu còn dùng thì chỉ là metadata phụ cho log/debug, không phải nguồn phân quyền chính.
-    - [ ] Service verify JWT lại trước khi authorize.
+    - [x] Gateway validate JWT (`signature`, `issuer`, `expiry`) cho endpoint private.
+    - [x] Gateway strip mọi header identity do client gửi: `X-User-Id`, `X-User-Email`, `X-User-Roles`.
+    - [x] Gateway forward nguyên `Authorization: Bearer <token>` xuống service.
+    - [x] `X-User-*` nếu còn dùng thì chỉ là metadata phụ cho log/debug, không phải nguồn phân quyền chính.
+    - [x] Service verify JWT lại trước khi authorize.
   - Việc cần làm:
-    - [ ] Tạo shared JWT validation/auth helper trong `xxxx-common` nếu phù hợp, hoặc module security chung
+    - [x] Tạo shared JWT validation/auth helper trong `xxxx-common` nếu phù hợp, hoặc module security chung
           để tránh copy-paste parser ở từng service.
-    - [ ] Chuẩn hóa claim JWT: `sub` = user id, `email`, `roles`, `iss`, `exp`, `jti`.
-    - [ ] Sửa `xxxx-gateway`: bỏ rule authorization chi tiết theo path/method, giữ public/private guard,
+    - [x] Chuẩn hóa claim JWT: `sub` = user id, `email`, `roles`, `iss`, `exp`, `jti`.
+    - [x] Sửa `xxxx-gateway`: bỏ rule authorization chi tiết theo path/method, giữ public/private guard,
           strip header giả mạo và forward `Authorization`.
-    - [ ] Thêm `SecurityConfig` + `JwtAuthenticationFilter` + principal nội bộ cho các service quan trọng.
-    - [ ] Map role sang Spring authority: `ADMIN` → `ROLE_ADMIN`, `USER` → `ROLE_USER`.
-    - [ ] Dùng `@EnableMethodSecurity` và `@PreAuthorize` cho endpoint cần quyền.
-    - [ ] Chuẩn hóa response `401 Unauthorized` và `403 Forbidden`.
+    - [x] Thêm `SecurityConfig` + `JwtAuthenticationFilter` + principal nội bộ cho các service quan trọng.
+    - [x] Map role sang Spring authority: `ADMIN` → `ROLE_ADMIN`, `USER` → `ROLE_USER`.
+    - [x] Dùng `@EnableMethodSecurity` và `@PreAuthorize` cho endpoint cần quyền.
+    - [x] Chuẩn hóa response `401 Unauthorized` và `403 Forbidden`.
   - Rule endpoint ưu tiên:
-    - [ ] `xxxx-user-service`: `/api/employees/**` cần `ADMIN`; `/api/users/{id}` là chính user đó hoặc `ADMIN`.
-    - [ ] `xxxx-event-service`: create/update/delete event cần `ADMIN`.
-    - [ ] `xxxx-ticket-service`: create/update/delete ticket và ticket detail cần `ADMIN`.
-    - [ ] `xxxx-inventory-service`: initialize stock, sửa tồn kho, bucket config cần `ADMIN`.
-    - [ ] `xxxx-order-service`: user chỉ xem/hủy order của mình; `ADMIN` xem tất cả.
-    - [ ] `xxxx-booking-service`: user chỉ xem booking của mình; `ADMIN` xem tất cả.
-    - [ ] `xxxx-payment-service`: VNPay callback/return vẫn public; transaction/admin endpoint cần `ADMIN`
+    - [x] `xxxx-user-service`: `/api/employees/**` cần `ADMIN`; `/api/users/{id}` là chính user đó hoặc `ADMIN`.
+    - [x] `xxxx-event-service`: create/update/delete event cần `ADMIN`.
+    - [x] `xxxx-ticket-service`: create/update/delete ticket và ticket detail cần `ADMIN`.
+    - [x] `xxxx-inventory-service`: initialize stock, sửa tồn kho, bucket config cần `ADMIN`.
+    - [x] `xxxx-order-service`: user chỉ xem/hủy order của mình; `ADMIN` xem tất cả.
+    - [x] `xxxx-booking-service`: user chỉ xem booking của mình; `ADMIN` xem tất cả.
+    - [x] `xxxx-payment-service`: VNPay callback/return vẫn public; transaction/admin endpoint cần `ADMIN`
           hoặc owner check.
   - Test bắt buộc:
-    - [ ] Gateway reject endpoint private khi thiếu/invalid token.
-    - [ ] Gateway strip `X-User-Roles: ADMIN` giả từ client.
-    - [ ] Service reject request gọi thẳng không có JWT.
-    - [ ] Service reject user thường gọi endpoint admin.
-    - [ ] Service accept admin gọi endpoint admin.
-    - [ ] Owner rule: user A không xem được order/booking/payment của user B.
+    - [x] Gateway reject endpoint private khi thiếu/invalid token.
+    - [x] Gateway strip `X-User-Roles: ADMIN` giả từ client.
+    - [x] Service reject request gọi thẳng không có JWT.
+    - [x] Service reject user thường gọi endpoint admin.
+    - [x] Service accept admin gọi endpoint admin.
+    - [x] Owner rule: user A không xem được order/booking/payment của user B.
     - [ ] Public endpoint vẫn chạy: login/register/refresh, VNPay callback/return, event listing nếu public.
   - Tài liệu:
-    - [ ] Cập nhật `docs/architecture.md` flow auth mới.
-    - [ ] Cập nhật `docs/cong-nghe-giai-thich.md` phần Gateway authentication vs Service authorization.
+    - [x] Cập nhật `docs/architecture.md` flow auth mới.
+    - [x] Cập nhật `docs/cong-nghe-giai-thich.md` phần Gateway authentication vs Service authorization.
     - [ ] Cập nhật lại mục này sau khi triển khai xong.
 
 ### Nhóm C — Sửa lỗi VNPay (chặn chạy thật) — Ưu tiên: CAO
@@ -127,11 +127,11 @@
 
 ### Nhóm D — Vận hành & chất lượng — Ưu tiên: Thấp
 
-- [ ] **D1. Tách docker-compose theo profile** (infra / observability / platform / business)
+- [x] **D1. Tách docker-compose theo profile** (infra / observability / platform / business)
       để máy dev nhẹ hơn.
-- [ ] **D2. Reconciliation job** — đối soát Redis vs MySQL định kỳ (chống lệch khi service
+- [x] **D2. Reconciliation job** — đối soát Redis vs MySQL định kỳ (chống lệch khi service
       chết giữa chừng).
-- [ ] **D3. Dọn warning null-safety** của Spring `@NonNull` (chỉ cảnh báo, không lỗi).
+- [x] **D3. Dọn warning null-safety** của Spring `@NonNull` (chỉ cảnh báo, không lỗi).
 - [ ] **D4. Bổ sung integration test** với Testcontainers (MySQL + Redis + Kafka thật).
 
 ---
@@ -157,7 +157,7 @@ mvn -N install -DskipTests           # parent pom
 mvn -pl xxxx-common install -DskipTests
 
 # Chạy hạ tầng cho dev
-docker-compose up -d mysql redis zookeeper kafka
+docker-compose --profile infra up -d
 
 # Lưu thay đổi lên git (tracking đã set sẵn)
 git add -A

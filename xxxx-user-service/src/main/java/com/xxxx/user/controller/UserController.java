@@ -1,6 +1,7 @@
 package com.xxxx.user.controller;
 
 import com.xxxx.common.response.ApiResponse;
+import com.xxxx.common.security.AuthenticatedUser;
 import com.xxxx.user.controller.dto.request.LoginRequest;
 import com.xxxx.user.controller.dto.request.LogoutRequest;
 import com.xxxx.user.controller.dto.request.RefreshTokenRequest;
@@ -15,6 +16,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -28,16 +32,16 @@ public class UserController {
 
     @Operation(summary = "Login", description = "Authenticate user with username and password")
     @PostMapping("/login")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         log.info("Login attempt for user: {}", request.getUsername());
-        LoginResponse response = userService.login(request);
+        LoginResponse response = userService.login(request, extractClientIp(httpRequest));
         return ApiResponse.ok(response);
     }
 
     @Operation(summary = "Refresh token", description = "Issue a new access token from a valid refresh token")
     @PostMapping("/refresh")
-    public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        TokenResponse response = userService.refresh(request);
+    public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
+        TokenResponse response = userService.refresh(request, extractClientIp(httpRequest));
         return ApiResponse.ok(response);
     }
 
@@ -58,6 +62,7 @@ public class UserController {
 
     @Operation(summary = "Get user by ID", description = "Retrieve user information by user ID")
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or #id == principal.userId")
     public ApiResponse<UserResponse> getUserById(
             @Parameter(description = "User ID") @PathVariable Long id) {
         log.info("Fetching user by id: {}", id);
@@ -68,9 +73,21 @@ public class UserController {
     @Operation(summary = "Get current user", description = "Retrieve current user information from X-User-Id header")
     @GetMapping("/me")
     public ApiResponse<UserResponse> getCurrentUser(
-            @Parameter(description = "User ID from gateway") @RequestHeader("X-User-Id") Long userId) {
-        log.info("Fetching current user with id: {}", userId);
-        UserResponse response = userService.getUserById(userId);
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        log.info("Fetching current user with id: {}", user.userId());
+        UserResponse response = userService.getUserById(user.userId());
         return ApiResponse.ok(response);
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 }

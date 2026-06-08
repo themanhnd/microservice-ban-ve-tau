@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -50,6 +51,7 @@ public class EventController {
 
     @Operation(summary = "Create event", description = "Create a new event")
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<EventResponse> createEvent(@Valid @RequestBody CreateEventRequest request) {
         log.info("Creating new event: {}", request.getName());
         EventResponse response = eventService.createEvent(request);
@@ -58,6 +60,7 @@ public class EventController {
 
     @Operation(summary = "Update event", description = "Update an existing event by ID")
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<EventResponse> updateEvent(
             @Parameter(description = "Event ID") @PathVariable Long id,
             @Valid @RequestBody UpdateEventRequest request) {
@@ -68,6 +71,7 @@ public class EventController {
 
     @Operation(summary = "Delete event", description = "Soft delete an event by ID")
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<Void> deleteEvent(
             @Parameter(description = "Event ID") @PathVariable Long id) {
         log.info("Deleting event id: {}", id);

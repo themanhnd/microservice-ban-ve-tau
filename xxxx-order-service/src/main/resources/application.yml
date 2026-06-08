@@ -5,3 +5,8 @@ spring:
     active: dev
   config:
     import: optional:configserver:${SPRING_CLOUD_CONFIG_URI:http://localhost:8888}
+
+gateway:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:xxxx-user-service}

@@ -56,6 +56,8 @@ public interface InventoryService {
      */
     List<InventoryBucketConfigEntity> getAllBucketConfigs();
 
+    void reconcileAllStockToRedis();
+
     /**
      * Tạo mới một cấu hình phân mảnh tồn kho.
      *

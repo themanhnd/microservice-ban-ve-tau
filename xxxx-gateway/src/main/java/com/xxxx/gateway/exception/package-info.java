@@ -1,0 +1,2 @@
+@org.springframework.lang.NonNullApi
+package com.xxxx.gateway.exception;

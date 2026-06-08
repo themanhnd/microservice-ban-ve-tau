@@ -7,6 +7,7 @@ import com.xxxx.inventory.lock.DistributedLockService;
 import com.xxxx.inventory.repository.InventoryAllotDetailRepository;
 import com.xxxx.inventory.repository.InventoryBucketConfigRepository;
 import com.xxxx.inventory.repository.entity.InventoryAllotDetailEntity;
+import com.xxxx.inventory.repository.entity.InventoryBucketConfigEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -184,5 +186,79 @@ class InventoryStockCalculationTest {
         assertThat(resp.getRemainingStock()).isEqualTo(3);
         verify(valueOps, never()).decrement(anyString(), any(Long.class));
         verify(allotRepository, never()).save(any());
+    }
+
+    @Test
+    void reconcileAllStockToRedis_rehydratesEveryTrackedTicketDetail() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(allotRepository.findDistinctActiveTicketDetailIds()).thenReturn(List.of(42L, 99L));
+
+        when(allotRepository.sumQuantityByType(42L, ALLOT)).thenReturn(100L);
+        when(allotRepository.sumQuantityByType(42L, RESERVE)).thenReturn(25L);
+        when(allotRepository.sumQuantityByType(42L, RELEASE)).thenReturn(5L);
+
+        when(allotRepository.sumQuantityByType(99L, ALLOT)).thenReturn(50L);
+        when(allotRepository.sumQuantityByType(99L, RESERVE)).thenReturn(10L);
+        when(allotRepository.sumQuantityByType(99L, RELEASE)).thenReturn(0L);
+
+        service.reconcileAllStockToRedis();
+
+        verify(valueOps).set("stock:42", "100");
+        verify(valueOps).set("stock:available:42", "80");
+        verify(valueOps).set("stock:99", "50");
+        verify(valueOps).set("stock:available:99", "40");
+    }
+
+    @Test
+    void initializeStock_distributesAvailableStockAcrossConfiguredBuckets() {
+        InventoryBucketConfigEntity config = InventoryBucketConfigEntity.builder()
+                .bucketNum(4)
+                .maxDepthNum(100)
+                .minDepthNum(0)
+                .thresholdValue(1)
+                .backSourceProportion(50)
+                .backSourceStep(10)
+                .build();
+
+        when(lockService.tryAcquire(anyString(), any(Duration.class))).thenReturn("tok");
+        when(bucketRepository.findByIsDefaultTrue()).thenReturn(Optional.of(config));
+        when(allotRepository.existsByTicketDetailIdAndType(42L, ALLOT)).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        stubStock(10, 0, 0);
+
+        service.initializeStock(42L, 10);
+
+        verify(valueOps).set("stock:available:42:0", "3");
+        verify(valueOps).set("stock:available:42:1", "3");
+        verify(valueOps).set("stock:available:42:2", "2");
+        verify(valueOps).set("stock:available:42:3", "2");
+    }
+
+    @Test
+    void reserveStock_usesBucketSpecificLockAndAvailableKey() {
+        InventoryBucketConfigEntity config = InventoryBucketConfigEntity.builder()
+                .bucketNum(4)
+                .maxDepthNum(100)
+                .minDepthNum(0)
+                .thresholdValue(1)
+                .backSourceProportion(50)
+                .backSourceStep(10)
+                .build();
+        ReserveStockRequest request = ReserveStockRequest.builder()
+                .ticketDetailId(42L).orderId("ORD-1").quantity(2).build();
+
+        when(bucketRepository.findByIsDefaultTrue()).thenReturn(Optional.of(config));
+        when(allotRepository.findByOrderIdAndTicketDetailId("ORD-1", 42L)).thenReturn(Optional.empty());
+        when(lockService.tryAcquire(eq("lock:inventory:42:1"), any(Duration.class))).thenReturn("tok");
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("stock:available:42:1")).thenReturn("5");
+        when(valueOps.decrement("stock:available:42:1", 2L)).thenReturn(3L);
+
+        ReserveStockResponse resp = service.reserveStock(request);
+
+        assertThat(resp.isSuccess()).isTrue();
+        assertThat(resp.getRemainingStock()).isEqualTo(3);
+        verify(valueOps).decrement("stock:available:42:1", 2L);
+        verify(lockService).release("lock:inventory:42:1", "tok");
     }
 }

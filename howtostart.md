@@ -18,7 +18,13 @@ mvn clean package -DskipTests
 ### 2. Start the entire system
 
 ```bash
-docker-compose up -d
+docker-compose --profile infra --profile platform --profile business up -d
+```
+
+If you need the monitoring stack too:
+
+```bash
+docker-compose --profile observability up -d
 ```
 
 ### 3. Verify services are running
@@ -31,8 +37,8 @@ docker-compose ps
 
 Docker Compose handles the startup order via `depends_on` with healthchecks:
 
-1. **Infrastructure**: MySQL, Redis, Kafka/Zookeeper, Elasticsearch
-2. **Observability**: Prometheus, Grafana, Logstash, Kibana, Zipkin
+1. **Infrastructure**: MySQL, Redis, Kafka/Zookeeper
+2. **Observability**: Prometheus, Grafana, Logstash, Kibana, Zipkin, Elasticsearch
 3. **Platform Services**: Discovery (Eureka) → Config Server → Gateway
 4. **Business Services**: Booking, Order, Payment, Ticket, Inventory, User, Event
 
@@ -50,7 +56,7 @@ For local development without Docker, start services in this order:
 
 ```bash
 # 1. Start infrastructure (MySQL, Redis, Kafka) via Docker
-docker-compose up -d mysql redis zookeeper kafka
+docker-compose --profile infra up -d
 
 # 2. Start Discovery Service
 cd xxxx-discovery

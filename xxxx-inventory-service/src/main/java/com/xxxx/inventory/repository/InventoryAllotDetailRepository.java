@@ -47,6 +47,13 @@ public interface InventoryAllotDetailRepository extends JpaRepository<InventoryA
     long sumQuantityByType(@Param("ticketDetailId") Long ticketDetailId, @Param("type") String type);
 
     /**
+     * Lấy danh sách ticket detail đang có lịch sử tồn kho để đối soát Redis từ DB.
+     */
+    @Query("SELECT DISTINCT a.ticketDetailId FROM InventoryAllotDetailEntity a " +
+            "WHERE a.ticketDetailId IS NOT NULL AND a.delFlag = 0")
+    List<Long> findDistinctActiveTicketDetailIds();
+
+    /**
      * Kiểm tra đã có bản ghi loại {@code type} cho ticket detail chưa.
      * Dùng để nạp tồn kho ban đầu (ALLOT) một cách idempotent khi mở bán.
      */

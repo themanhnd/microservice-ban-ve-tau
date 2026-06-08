@@ -10,19 +10,24 @@ import com.xxxx.order.controller.dto.request.PlaceOrderRequest;
 import com.xxxx.order.controller.dto.response.OrderResponse;
 import com.xxxx.order.controller.dto.response.OrderStatusResponse;
 import com.xxxx.order.event.producer.OrderEventProducer;
+import com.xxxx.order.repository.OrderQueueRepository;
 import com.xxxx.order.repository.OrderRepository;
 import com.xxxx.order.repository.entity.OrderEntity;
+import com.xxxx.order.repository.entity.OrderQueueEntity;
 import com.xxxx.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
@@ -41,10 +46,21 @@ public class OrderServiceImpl implements OrderService {
 
     private static final String SOURCE_SERVICE = "order-service";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final int QUEUE_WAITING = 0;
+    private static final int QUEUE_PROCESSING = 1;
+    private static final int QUEUE_COMPLETED = 2;
+    private static final int QUEUE_EXPIRED = 3;
 
     private final OrderRepository orderRepository;
+    private final OrderQueueRepository orderQueueRepository;
     private final OrderEventProducer orderEventProducer;
     private final StringRedisTemplate stringRedisTemplate;
+
+    @Value("${order.waiting-room.max-processing:50}")
+    private int maxProcessingOrders;
+
+    @Value("${order.waiting-room.token-ttl-minutes:15}")
+    private long queueTokenTtlMinutes;
 
     // --- Public API methods ---
 
@@ -54,19 +70,21 @@ public class OrderServiceImpl implements OrderService {
         // Generate unique orderNo
         String orderNo = generateOrderNo();
         String correlationId = UUID.randomUUID().toString();
+        String queueToken = UUID.randomUUID().toString().replace("-", "");
+        int queuePosition = (int) orderQueueRepository.countByStatus(QUEUE_WAITING) + 1;
 
         log.info("Placing order: orderNo={}, userId={}, ticketDetailId={}, quantity={}, correlationId={}",
                 orderNo, request.getUserId(), request.getTicketDetailId(), request.getQuantity(), correlationId);
 
-        // Create OrderEntity with status=PENDING, sagaStatus=STARTED
+        // Create OrderEntity in waiting room first
         OrderEntity order = OrderEntity.builder()
                 .orderNo(orderNo)
                 .userId(request.getUserId())
                 .ticketDetailId(request.getTicketDetailId())
                 .quantity(request.getQuantity())
                 .totalAmount(request.getTotalAmount())
-                .status("PENDING")
-                .sagaStatus("STARTED")
+                .status("QUEUED")
+                .sagaStatus("WAITING_ROOM")
                 .correlationId(correlationId)
                 .build();
 
@@ -74,19 +92,15 @@ public class OrderServiceImpl implements OrderService {
         order = orderRepository.save(order);
         log.info("Order saved: id={}, orderNo={}", order.getId(), order.getOrderNo());
 
-        // Build and publish OrderPlacedEvent
-        OrderPlacedEvent event = new OrderPlacedEvent();
-        event.setOrderId(orderNo);
-        event.setUserId(request.getUserId());
-        event.setTicketDetailId(String.valueOf(request.getTicketDetailId()));
-        event.setQuantity(request.getQuantity());
-        event.setTotalAmount(request.getTotalAmount());
-        event.initDefaults(SOURCE_SERVICE, correlationId);
+        OrderQueueEntity queueEntity = OrderQueueEntity.builder()
+                .orderId(order.getId())
+                .token(queueToken)
+                .status(QUEUE_WAITING)
+                .priority(0)
+                .build();
+        orderQueueRepository.save(queueEntity);
 
-        orderEventProducer.publishOrderPlaced(event);
-        log.info("OrderPlacedEvent published for orderNo={}", orderNo);
-
-        return mapToResponse(order);
+        return mapToResponse(order, queueEntity, queuePosition);
     }
 
     @Override
@@ -119,6 +133,43 @@ public class OrderServiceImpl implements OrderService {
                 .collect(Collectors.toList());
 
         return PageResponse.of(orderResponses, page, size, orderPage.getTotalElements());
+    }
+
+    @Scheduled(fixedDelayString = "${order.waiting-room.worker-delay-ms:1000}")
+    @Transactional
+    public int processWaitingRoomBatch() {
+        LocalDateTime expiredBefore = LocalDateTime.now().minusMinutes(queueTokenTtlMinutes);
+        int expired = orderQueueRepository.markExpiredWaitingTokens(expiredBefore);
+        if (expired > 0) {
+            log.info("Expired {} waiting room token(s)", expired);
+        }
+
+        long processingCount = orderQueueRepository.countByStatus(QUEUE_PROCESSING);
+        int capacity = (int) Math.max(0, maxProcessingOrders - processingCount);
+        if (capacity == 0) {
+            return 0;
+        }
+
+        List<OrderQueueEntity> waitingItems = orderQueueRepository.findWaitingQueue(PageRequest.of(0, capacity));
+        int processed = 0;
+        for (OrderQueueEntity queueItem : waitingItems) {
+            OrderEntity order = orderRepository.findById(queueItem.getOrderId()).orElse(null);
+            if (order == null) {
+                queueItem.setStatus(QUEUE_EXPIRED);
+                orderQueueRepository.save(queueItem);
+                continue;
+            }
+
+            queueItem.setStatus(QUEUE_PROCESSING);
+            orderQueueRepository.save(queueItem);
+
+            order.setStatus("PENDING");
+            order.setSagaStatus("STARTED");
+            orderRepository.save(order);
+            publishOrderPlaced(order);
+            processed++;
+        }
+        return processed;
     }
 
     @Override
@@ -213,6 +264,7 @@ public class OrderServiceImpl implements OrderService {
         order.setSagaStatus("COMPLETED");
         order.setPaymentTransactionId(transactionId);
         orderRepository.save(order);
+        completeQueueItem(order);
 
         // Publish OrderConfirmedEvent
         OrderConfirmedEvent event = new OrderConfirmedEvent();
@@ -243,6 +295,7 @@ public class OrderServiceImpl implements OrderService {
         order.setSagaStatus("COMPENSATING");
         order.setFailureReason(reason);
         orderRepository.save(order);
+        completeQueueItem(order);
 
         // Publish OrderCancelledEvent with compensationRequired=true to release inventory
         OrderCancelledEvent event = new OrderCancelledEvent();
@@ -257,6 +310,27 @@ public class OrderServiceImpl implements OrderService {
     }
 
     // --- Private helper methods ---
+
+    private void publishOrderPlaced(OrderEntity order) {
+        OrderPlacedEvent event = new OrderPlacedEvent();
+        event.setOrderId(order.getOrderNo());
+        event.setUserId(order.getUserId());
+        event.setTicketDetailId(String.valueOf(order.getTicketDetailId()));
+        event.setQuantity(order.getQuantity());
+        event.setTotalAmount(order.getTotalAmount());
+        event.initDefaults(SOURCE_SERVICE, order.getCorrelationId());
+
+        orderEventProducer.publishOrderPlaced(event);
+        log.info("OrderPlacedEvent published for orderNo={}", order.getOrderNo());
+    }
+
+    private void completeQueueItem(OrderEntity order) {
+        orderQueueRepository.findByOrderId(order.getId())
+                .ifPresent(queueItem -> {
+                    queueItem.setStatus(QUEUE_COMPLETED);
+                    orderQueueRepository.save(queueItem);
+                });
+    }
 
     /**
      * Generate unique order number with format: "ORD-{yyyyMMdd}-{UUID_short}"
@@ -279,6 +353,10 @@ public class OrderServiceImpl implements OrderService {
      * Map OrderEntity to OrderResponse DTO.
      */
     private OrderResponse mapToResponse(OrderEntity order) {
+        return mapToResponse(order, null, null);
+    }
+
+    private OrderResponse mapToResponse(OrderEntity order, OrderQueueEntity queueEntity, Integer queuePosition) {
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderNo(order.getOrderNo())
@@ -291,9 +369,25 @@ public class OrderServiceImpl implements OrderService {
                 .paymentTransactionId(order.getPaymentTransactionId())
                 .correlationId(order.getCorrelationId())
                 .failureReason(order.getFailureReason())
+                .queueToken(queueEntity != null ? queueEntity.getToken() : null)
+                .queueStatus(mapQueueStatus(queueEntity))
+                .queuePosition(queuePosition)
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();
+    }
+
+    private String mapQueueStatus(OrderQueueEntity queueEntity) {
+        if (queueEntity == null) {
+            return null;
+        }
+        return switch (queueEntity.getStatus()) {
+            case QUEUE_WAITING -> "WAITING";
+            case QUEUE_PROCESSING -> "PROCESSING";
+            case QUEUE_COMPLETED -> "COMPLETED";
+            case QUEUE_EXPIRED -> "EXPIRED";
+            default -> null;
+        };
     }
 
     /**
