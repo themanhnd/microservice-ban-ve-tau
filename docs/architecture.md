@@ -175,7 +175,7 @@ Tu cap nhat B5, he thong dung mo hinh **Gateway authenticate, Service authorize*
 - Gateway xoa cac identity header do client tu gui (`X-User-Id`, `X-User-Email`, `X-User-Roles`) de chan gia mao quyen.
 - Gateway forward nguyen `Authorization: Bearer <token>` xuong service; `X-User-*` chi con la metadata phu cho log/debug.
 - Cac service nghiep vu tu verify JWT lai bang shared helper trong `xxxx-common`, tao principal noi bo va dung `@PreAuthorize` de quyet dinh quyen theo nghiep vu.
-- Cac rule owner/admin nam trong service: user chi xem sua tai nguyen cua minh, `ADMIN` moi duoc thao tac quan tri.
+- Cac rule owner/admin nam trong service: user chi xem sua tai nguyen cua minh, `ADMIN` moi duoc thao tac quan tri.`r`n- Public endpoints vẫn đi qua public allow-list rõ ràng: `login/register/refresh`, VNPay callback/return và GET event listing.
 
 ```mermaid
 sequenceDiagram

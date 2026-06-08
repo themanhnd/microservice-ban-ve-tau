@@ -5,6 +5,8 @@ import com.xxxx.user.controller.EmployeeController;
 import com.xxxx.user.controller.UserController;
 import com.xxxx.user.controller.dto.response.EmployeeResponse;
 import com.xxxx.user.controller.dto.response.UserResponse;
+import com.xxxx.user.controller.dto.response.LoginResponse;
+import com.xxxx.user.controller.dto.response.TokenResponse;
 import com.xxxx.user.service.EmployeeService;
 import com.xxxx.user.service.UserService;
 import io.jsonwebtoken.Jwts;
@@ -29,6 +31,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -98,6 +101,34 @@ class UserAuthorizationWebMvcTest {
                 .andExpect(jsonPath("$.code").value("403"));
     }
 
+
+    @Test
+    void allowsPublicAuthEndpointsWithoutJwt() throws Exception {
+        when(userService.login(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(LoginResponse.builder().accessToken("access").refreshToken("refresh").tokenType("Bearer").expiresIn(1800L).build());
+        when(userService.register(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(UserResponse.builder().id(1L).username("alice").email("alice@example.com").build());
+        when(userService.refresh(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(TokenResponse.builder().accessToken("new-access").refreshToken("new-refresh").tokenType("Bearer").expiresIn(1800L).build());
+
+        mockMvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\",\"password\":\"secret123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"alice\",\"email\":\"alice@example.com\",\"password\":\"secret123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(post("/api/users/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
     private String bearer(String subject, String roles) {
         return "Bearer " + token(subject, roles);
     }

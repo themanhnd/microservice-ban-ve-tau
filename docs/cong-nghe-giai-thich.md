@@ -896,7 +896,7 @@ JWT có claim `roles`, nhưng quyền nghiệp vụ không còn phụ thuộc ho
 - **Gateway authenticate**: kiểm tra JWT có chữ ký đúng, issuer đúng và chưa hết hạn trước khi cho request đi tiếp.
 - **Gateway chống giả mạo identity**: xóa `X-User-Id`, `X-User-Email`, `X-User-Roles` do client gửi, rồi chỉ gắn metadata đã verify để log/debug.
 - **Service authorize**: từng service verify lại `Authorization: Bearer <token>`, tạo principal nội bộ và dùng `@PreAuthorize` cho rule `ADMIN`/owner.
-- **Shared security**: parser JWT, principal và filter dùng chung nằm trong `xxxx-common` để tránh mỗi service tự copy parser khác nhau.
+- **Shared security**: parser JWT, principal và filter dùng chung nằm trong `xxxx-common` để tránh mỗi service tự copy parser khác nhau.`r`n- **Public endpoint vẫn được kiểm thử**: login/register/refresh, VNPay callback/return và GET event listing chạy được khi không có JWT.
 
 Cách này an toàn hơn vì nếu ai đó gọi thẳng vào service nội bộ, service vẫn tự reject request thiếu/invalid JWT. Gateway chỉ là lớp chặn đầu tiên, còn quyền thật sự nằm sát nghiệp vụ.
 ### Các biến môi trường auth

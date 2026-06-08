@@ -76,7 +76,7 @@
   - [x] Thêm integration test cho login → refresh → logout.
   - [x] Thêm rate limit riêng cho login/refresh.
 
-- [ ] **B5. Chuyển đúng mô hình Gateway authenticate, Service authorize** — Ưu tiên: CAO
+- [x] **B5. Chuyển đúng mô hình Gateway authenticate, Service authorize** — Ưu tiên: CAO
   - Mục tiêu: gateway chỉ xác thực JWT và forward token; từng service tự verify JWT lại và tự
     quyết định quyền theo nghiệp vụ. Không phụ thuộc hoàn toàn vào rule role ở gateway.
   - Nguyên tắc:
@@ -111,11 +111,11 @@
     - [x] Service reject user thường gọi endpoint admin.
     - [x] Service accept admin gọi endpoint admin.
     - [x] Owner rule: user A không xem được order/booking/payment của user B.
-    - [ ] Public endpoint vẫn chạy: login/register/refresh, VNPay callback/return, event listing nếu public.
+    - [x] Public endpoint vẫn chạy: login/register/refresh, VNPay callback/return, event listing nếu public.
   - Tài liệu:
     - [x] Cập nhật `docs/architecture.md` flow auth mới.
     - [x] Cập nhật `docs/cong-nghe-giai-thich.md` phần Gateway authentication vs Service authorization.
-    - [ ] Cập nhật lại mục này sau khi triển khai xong.
+    - [x] Cập nhật lại mục này sau khi triển khai xong.
 
 ### Nhóm C — Sửa lỗi VNPay (chặn chạy thật) — Ưu tiên: CAO
 

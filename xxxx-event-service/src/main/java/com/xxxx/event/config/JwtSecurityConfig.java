@@ -28,7 +28,7 @@ public class JwtSecurityConfig {
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(
                 jwtSecret,
                 jwtIssuer,
-                List.of("/actuator", "/swagger-ui", "/v3/api-docs")
+                List.of("/api/events", "/actuator", "/swagger-ui", "/v3/api-docs")
         );
 
         return http
@@ -37,7 +37,7 @@ public class JwtSecurityConfig {
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(SecurityErrorHandlers.unauthorized(objectMapper))
                         .accessDeniedHandler(SecurityErrorHandlers.forbidden(objectMapper)))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/actuator", "/swagger-ui", "/v3/api-docs").permitAll().anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth.requestMatchers(org.springframework.http.HttpMethod.GET, "/api/events", "/api/events/**").permitAll().requestMatchers("/actuator", "/swagger-ui", "/v3/api-docs").permitAll().anyRequest().authenticated())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

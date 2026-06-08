@@ -48,6 +48,23 @@ class AuthenticationFilterTest {
         assertThat(exchange.getResponse().getStatusCode().value()).isEqualTo(401);
     }
 
+
+    @Test
+    void allowsConfiguredPublicEndpointWithoutJwt() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/users/login").build()
+        );
+        AtomicReference<ServerHttpRequest> forwardedRequest = new AtomicReference<>();
+        GatewayFilterChain chain = requestExchange -> {
+            forwardedRequest.set(requestExchange.getRequest());
+            return Mono.empty();
+        };
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isNull();
+        assertThat(forwardedRequest.get()).isNotNull();
+    }
     @Test
     void stripsSpoofedIdentityHeadersAndForwardsVerifiedMetadata() {
         MockServerWebExchange exchange = MockServerWebExchange.from(

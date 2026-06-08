@@ -109,6 +109,7 @@ gateway:
       - /api/users/login
       - /api/users/register
       - /api/users/refresh
+      - /api/events
       - /swagger-ui.html
       - /swagger-ui
       - /v3/api-docs
