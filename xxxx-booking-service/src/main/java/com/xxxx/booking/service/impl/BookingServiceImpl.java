@@ -9,6 +9,7 @@ import com.xxxx.booking.repository.BookingRepository;
 import com.xxxx.booking.repository.entity.BookingEntity;
 import com.xxxx.booking.repository.entity.BookingEntity.BookingStatus;
 import com.xxxx.booking.service.BookingService;
+import com.xxxx.common.event.OrderConfirmedEvent;
 import com.xxxx.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,16 +29,19 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final TicketServiceClient ticketServiceClient;
 
+    /**
+     * Tạo booking thủ công ở trạng thái PENDING sau khi kiểm tra thông tin vé.
+     */
     @Override
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request) {
-        // Validate ticket exists via Feign client
+        // Kiểm tra vé tồn tại thông qua Feign client
         validateTicketExists(request.getTicketId());
 
-        // Generate booking number
+        // Sinh mã booking
         String bookingNo = generateBookingNo();
 
-        // Create entity
+        // Tạo entity booking
         BookingEntity entity = new BookingEntity()
                 .setBookingNo(bookingNo)
                 .setUserId(request.getUserId())
@@ -55,6 +59,9 @@ public class BookingServiceImpl implements BookingService {
         return BookingResponse.fromEntity(saved);
     }
 
+    /**
+     * Lấy booking theo id và cache kết quả đọc.
+     */
     @Override
     @Cacheable(value = "bookings", key = "#id")
     public BookingResponse getBookingById(Long id) {
@@ -63,6 +70,9 @@ public class BookingServiceImpl implements BookingService {
         return BookingResponse.fromEntity(entity);
     }
 
+    /**
+     * Lấy toàn bộ booking của một người dùng.
+     */
     @Override
     public List<BookingResponse> getBookingsByUserId(Long userId) {
         return bookingRepository.findByUserId(userId).stream()
@@ -70,6 +80,9 @@ public class BookingServiceImpl implements BookingService {
                 .toList();
     }
 
+    /**
+     * Cập nhật booking còn hiệu lực và xóa cache theo id sau khi lưu.
+     */
     @Override
     @Transactional
     @CacheEvict(value = "bookings", key = "#id")
@@ -77,6 +90,7 @@ public class BookingServiceImpl implements BookingService {
         BookingEntity entity = bookingRepository.findById(id)
                 .orElseThrow(() -> new BookingNotFoundException(id));
 
+        // Không cho sửa booking đã hủy để tránh lệch trạng thái với order/payment.
         if (entity.getStatus() == BookingStatus.CANCELLED) {
             throw new IllegalStateException("Cannot update a cancelled booking");
         }
@@ -94,6 +108,9 @@ public class BookingServiceImpl implements BookingService {
         return BookingResponse.fromEntity(updated);
     }
 
+    /**
+     * Hủy booking theo id từ API nội bộ/người dùng.
+     */
     @Override
     @Transactional
     @CacheEvict(value = "bookings", key = "#id")
@@ -112,6 +129,9 @@ public class BookingServiceImpl implements BookingService {
         return BookingResponse.fromEntity(cancelled);
     }
 
+    /**
+     * Xác nhận booking đã tồn tại theo orderNo.
+     */
     @Override
     @Transactional
     public void confirmBookingByOrderNo(String orderNo) {
@@ -125,6 +145,56 @@ public class BookingServiceImpl implements BookingService {
         );
     }
 
+
+    /**
+     * Xử lý order.confirmed: cập nhật booking cũ hoặc tạo booking CONFIRMED nếu chưa có.
+     */
+    @Override
+    @Transactional
+    public void confirmBookingFromOrder(OrderConfirmedEvent event) {
+        // Upsert theo orderNo để consumer Kafka có thể xử lý lặp mà không tạo trùng booking.
+        bookingRepository.findByOrderNo(event.getOrderId()).ifPresentOrElse(
+                entity -> {
+                    entity.setStatus(BookingStatus.CONFIRMED);
+                    bookingRepository.save(entity);
+                    log.info("Confirmed existing booking: {} for orderNo={}", entity.getBookingNo(), event.getOrderId());
+                },
+                () -> {
+                    // Hiện event chưa có ticketId riêng nên tạm dùng ticketDetailId để liên kết booking.
+                    Long ticketDetailId = Long.parseLong(event.getTicketDetailId());
+                    BookingEntity entity = new BookingEntity()
+                            .setBookingNo(generateBookingNo())
+                            .setUserId(Long.parseLong(event.getUserId()))
+                            .setTicketId(ticketDetailId)
+                            .setTicketDetailId(ticketDetailId)
+                            .setQuantity(event.getQuantity())
+                            .setTotalAmount(event.getTotalAmount())
+                            .setStatus(BookingStatus.CONFIRMED)
+                            .setOrderNo(event.getOrderId())
+                            .setNotes("Created from confirmed order");
+                    BookingEntity saved = bookingRepository.save(entity);
+                    log.info("Created confirmed booking: {} for orderNo={}", saved.getBookingNo(), event.getOrderId());
+                }
+        );
+    }
+
+    /**
+     * Hủy booking theo orderNo khi nhận order.cancelled từ Kafka.
+     */
+    @Override
+    @Transactional
+    public void cancelBookingByOrderNo(String orderNo) {
+        bookingRepository.findByOrderNo(orderNo).ifPresent(entity -> {
+            if (entity.getStatus() != BookingStatus.CANCELLED) {
+                entity.setStatus(BookingStatus.CANCELLED);
+                bookingRepository.save(entity);
+                log.info("Cancelled booking: {} for orderNo={}", entity.getBookingNo(), orderNo);
+            }
+        });
+    }
+    /**
+     * Kiểm tra vé tồn tại qua ticket-service; lỗi tạm thời chỉ cảnh báo để không chặn booking.
+     */
     private void validateTicketExists(Long ticketId) {
         try {
             ApiResponse<?> response = ticketServiceClient.getTicketById(ticketId);
@@ -133,10 +203,13 @@ public class BookingServiceImpl implements BookingService {
             }
         } catch (Exception e) {
             log.warn("Failed to validate ticket existence for ticketId={}: {}", ticketId, e.getMessage());
-            // Allow booking creation even if ticket service is unavailable (resilience)
+            // Vẫn cho phép tạo booking khi ticket-service tạm thời không khả dụng để tăng khả năng chịu lỗi
         }
     }
 
+    /**
+     * Sinh mã booking ngắn, đủ phân biệt cho log và tra cứu vận hành.
+     */
     private String generateBookingNo() {
         return "BK" + System.currentTimeMillis()
                 + UUID.randomUUID().toString().substring(0, 4).toUpperCase();

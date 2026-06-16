@@ -22,6 +22,9 @@ public interface OrderQueueRepository extends JpaRepository<OrderQueueEntity, Lo
 
     Optional<OrderQueueEntity> findByOrderId(Long orderId);
 
+    @Query("SELECT q FROM OrderQueueEntity q WHERE q.status = 0 AND q.createdAt < :expiredBefore")
+    List<OrderQueueEntity> findExpiredWaitingQueue(@Param("expiredBefore") LocalDateTime expiredBefore);
+
     @Modifying
     @Query("UPDATE OrderQueueEntity q SET q.status = 3 WHERE q.status = 0 AND q.createdAt < :expiredBefore")
     int markExpiredWaitingTokens(@Param("expiredBefore") LocalDateTime expiredBefore);

@@ -12,10 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * JPA Entity cho đơn hàng (ticker_order).
- * Quản lý vòng đời đơn hàng từ khi tạo đến khi hoàn thành hoặc hủy.
- * Hỗ trợ Saga pattern với sagaStatus để theo dõi trạng thái saga.
- * Sử dụng optimistic locking (@Version) để xử lý concurrent updates.
+ * Entity lưu thông tin đơn hàng và trạng thái saga.
  */
 @Data
 @Builder
@@ -23,7 +20,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Entity
 @Table(name = "ticker_order", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_order_no", columnNames = "order_no")
+        @UniqueConstraint(name = "uk_order_no", columnNames = "order_no"),
+        @UniqueConstraint(name = "uk_order_user_idempotency", columnNames = {"user_id", "idempotency_key"})
 })
 public class OrderEntity {
 
@@ -31,70 +29,58 @@ public class OrderEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Mã đơn hàng duy nhất.
-     */
+    /** Mã đơn hàng duy nhất. */
     @Column(name = "order_no", nullable = false, unique = true, length = 64)
     private String orderNo;
 
-    /**
-     * ID người dùng đặt hàng.
-     */
+    /** Mã người dùng đặt hàng. */
     @Column(name = "user_id", nullable = false, length = 64)
     private String userId;
 
-    /**
-     * ID chi tiết vé được đặt.
-     */
+    /** Mã chi tiết vé được đặt. */
     @Column(name = "ticket_detail_id", nullable = false)
     private Long ticketDetailId;
 
-    /**
-     * Số lượng vé đặt.
-     */
+    /** Số lượng vé đặt. */
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    /**
-     * Tổng số tiền đơn hàng.
-     */
+    /** Tổng tiền của đơn hàng. */
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
-    /**
-     * Trạng thái đơn hàng:
-     * PENDING, INVENTORY_RESERVED, PAYMENT_PROCESSING, CONFIRMED, CANCELLED, EXPIRED
-     */
+    /** Trạng thái nghiệp vụ của đơn hàng. */
     @Column(name = "status", nullable = false, length = 32)
     private String status;
 
-    /**
-     * Trạng thái saga (theo dõi tiến trình saga orchestration).
-     */
+    /** Trạng thái xử lý saga. */
     @Column(name = "saga_status", length = 32)
     private String sagaStatus;
 
-    /**
-     * ID giao dịch thanh toán (được điền sau khi thanh toán thành công).
-     */
+    /** Mã giao dịch thanh toán sau khi khởi tạo thanh toán. */
     @Column(name = "payment_transaction_id", length = 128)
     private String paymentTransactionId;
 
-    /**
-     * Correlation ID cho distributed tracing.
-     */
+    /** URL thanh toán trả về từ cổng thanh toán. */
+    @Column(name = "payment_url", length = 2048)
+    private String paymentUrl;
+
+    /** Correlation ID để truy vết request liên service. */
     @Column(name = "correlation_id", length = 64)
     private String correlationId;
 
-    /**
-     * Lý do thất bại/hủy đơn hàng.
-     */
+    /** Khóa idempotency để chặn tạo trùng order khi client retry/double-click. */
+    @Column(name = "idempotency_key", length = 128)
+    private String idempotencyKey;
+
+    /** Thời điểm thanh toán hết hạn để worker auto-cancel đơn. */
+    @Column(name = "payment_expires_at")
+    private LocalDateTime paymentExpiresAt;
+
+    /** Lý do thất bại, huỷ hoặc hết hạn đơn hàng. */
     @Column(name = "failure_reason", length = 512)
     private String failureReason;
 
-    /**
-     * Phiên bản cho cơ chế khóa lạc quan (Optimistic Locking).
-     */
     @Version
     @Column(name = "version_id")
     private Long versionId;

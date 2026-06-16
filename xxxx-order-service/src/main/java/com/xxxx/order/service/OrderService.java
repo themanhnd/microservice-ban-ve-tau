@@ -37,6 +37,14 @@ public interface OrderService {
     OrderStatusResponse getOrderStatus(String orderNo);
 
     /**
+     * Lấy thông tin checkout rõ ràng cho frontend polling/redirect.
+     *
+     * @param orderNo mã đơn hàng
+     * @return trạng thái checkout
+     */
+    OrderStatusResponse getCheckoutInfo(String orderNo);
+
+    /**
      * Lấy danh sách đơn hàng theo userId (phân trang).
      *
      * @param userId ID người dùng

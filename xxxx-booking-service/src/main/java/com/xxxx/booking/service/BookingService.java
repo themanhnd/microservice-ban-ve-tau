@@ -3,6 +3,7 @@ package com.xxxx.booking.service;
 import com.xxxx.booking.controller.dto.request.CreateBookingRequest;
 import com.xxxx.booking.controller.dto.request.UpdateBookingRequest;
 import com.xxxx.booking.controller.dto.response.BookingResponse;
+import com.xxxx.common.event.OrderConfirmedEvent;
 
 import java.util.List;
 
@@ -18,9 +19,9 @@ public interface BookingService {
 
     BookingResponse cancelBooking(Long id);
 
-    /**
-     * Update booking status to CONFIRMED when order is confirmed.
-     * Called by Kafka consumer when OrderConfirmedEvent is received.
-     */
     void confirmBookingByOrderNo(String orderNo);
+
+    void confirmBookingFromOrder(OrderConfirmedEvent event);
+
+    void cancelBookingByOrderNo(String orderNo);
 }

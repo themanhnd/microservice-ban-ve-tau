@@ -1,73 +1,33 @@
 package com.xxxx.inventory.event.producer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xxxx.common.constant.KafkaTopics;
-import com.xxxx.common.event.InventoryReservedEvent;
 import com.xxxx.common.event.InventoryReserveFailedEvent;
+import com.xxxx.common.event.InventoryReservedEvent;
+import com.xxxx.inventory.repository.InventoryEventOutboxRepository;
+import com.xxxx.inventory.repository.entity.InventoryEventOutboxEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
+import java.time.LocalDateTime;
 
-/**
- * Kafka event producer cho Inventory Service.
- * Publish các events: InventoryReserved, InventoryReserveFailed.
- */
+/** Ghi event inventory vào outbox trong cùng transaction với DB update. */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class InventoryEventProducer {
+    private static final String STATUS_PENDING = "PENDING";
+    private final InventoryEventOutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    public void publishInventoryReserved(InventoryReservedEvent event) { saveOutbox(KafkaTopics.INVENTORY_RESERVED, event.getOrderId(), event); }
+    public void publishInventoryReserveFailed(InventoryReserveFailedEvent event) { saveOutbox(KafkaTopics.INVENTORY_RESERVE_FAILED, event.getOrderId(), event); }
 
-    /**
-     * Publish InventoryReservedEvent khi reserve stock thành công.
-     *
-     * @param event event chứa thông tin reservation thành công
-     */
-    public void publishInventoryReserved(InventoryReservedEvent event) {
-        String topic = KafkaTopics.INVENTORY_RESERVED;
-        String key = event.getOrderId();
-
-        log.info("Publishing InventoryReservedEvent to topic [{}] with key [{}], orderId={}, ticketDetailId={}, quantity={}",
-                topic, key, event.getOrderId(), event.getTicketDetailId(), event.getQuantity());
-
-        kafkaTemplate.send(topic, key, event)
-                .whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        log.info("Successfully published InventoryReservedEvent for orderId={}, partition={}, offset={}",
-                                event.getOrderId(),
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                    } else {
-                        log.error("Failed to publish InventoryReservedEvent for orderId={}: {}",
-                                event.getOrderId(), ex.getMessage(), ex);
-                    }
-                });
-    }
-
-    /**
-     * Publish InventoryReserveFailedEvent khi reserve stock thất bại.
-     *
-     * @param event event chứa thông tin reservation thất bại
-     */
-    public void publishInventoryReserveFailed(InventoryReserveFailedEvent event) {
-        String topic = KafkaTopics.INVENTORY_RESERVE_FAILED;
-        String key = event.getOrderId();
-
-        log.info("Publishing InventoryReserveFailedEvent to topic [{}] with key [{}], orderId={}, reason={}",
-                topic, key, event.getOrderId(), event.getReason());
-
-        kafkaTemplate.send(topic, key, event)
-                .whenComplete((result, ex) -> {
-                    if (ex == null) {
-                        log.info("Successfully published InventoryReserveFailedEvent for orderId={}, partition={}, offset={}",
-                                event.getOrderId(),
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                    } else {
-                        log.error("Failed to publish InventoryReserveFailedEvent for orderId={}: {}",
-                                event.getOrderId(), ex.getMessage(), ex);
-                    }
-                });
+    private void saveOutbox(String topic, String key, Object event) {
+        try {
+            outboxRepository.save(InventoryEventOutboxEntity.builder().topic(topic).eventKey(key).eventType(event.getClass().getName()).payload(objectMapper.writeValueAsString(event)).status(STATUS_PENDING).attemptCount(0).nextAttemptAt(LocalDateTime.now()).build());
+            log.info("Inventory event enqueued to outbox: topic={}, key={}, eventType={}", topic, key, event.getClass().getSimpleName());
+        } catch (JsonProcessingException e) { throw new IllegalStateException("Cannot serialize inventory event to outbox: " + event.getClass().getName(), e); }
     }
 }

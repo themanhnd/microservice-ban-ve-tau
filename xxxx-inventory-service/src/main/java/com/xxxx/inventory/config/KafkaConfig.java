@@ -1,5 +1,6 @@
 package com.xxxx.inventory.config;
 
+import com.xxxx.common.event.OrderCancelledEvent;
 import com.xxxx.common.event.OrderPlacedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -17,8 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka configuration cho Inventory Service.
- * Cấu hình Producer (JsonSerializer) và Consumer (JsonDeserializer cho OrderPlacedEvent).
+ * Cấu hình Kafka cho producer và consumer của Inventory Service.
  */
 @Configuration
 public class KafkaConfig {
@@ -26,7 +26,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    // ==================== Producer Configuration ====================
+    // ==================== Cấu hình Producer ====================
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
@@ -45,7 +45,7 @@ public class KafkaConfig {
         return new KafkaTemplate<>(producerFactory());
     }
 
-    // ==================== Consumer Configuration ====================
+    // ==================== Cấu hình Consumer ====================
 
     @Bean
     public ConsumerFactory<String, OrderPlacedEvent> orderPlacedConsumerFactory() {
@@ -72,6 +72,34 @@ public class KafkaConfig {
         ConcurrentKafkaListenerContainerFactory<String, OrderPlacedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(orderPlacedConsumerFactory());
+        return factory;
+    }
+
+    @Bean
+    public ConsumerFactory<String, OrderCancelledEvent> orderCancelledConsumerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        configProps.put(ConsumerConfig.GROUP_ID_CONFIG, "inventory-service-group");
+        configProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        configProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        configProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+
+        JsonDeserializer<OrderCancelledEvent> deserializer = new JsonDeserializer<>(OrderCancelledEvent.class);
+        deserializer.addTrustedPackages("com.xxxx.common.event");
+        deserializer.setUseTypeMapperForKey(false);
+
+        return new DefaultKafkaConsumerFactory<>(
+                configProps,
+                new StringDeserializer(),
+                deserializer
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, OrderCancelledEvent> orderCancelledListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, OrderCancelledEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(orderCancelledConsumerFactory());
         return factory;
     }
 }

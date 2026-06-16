@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_booking_no", columnList = "bookingNo", unique = true),
         @Index(name = "idx_booking_user_id", columnList = "userId"),
         @Index(name = "idx_booking_ticket_id", columnList = "ticketId"),
-        @Index(name = "idx_booking_order_no", columnList = "orderNo")
+        @Index(name = "idx_booking_order_no", columnList = "orderNo", unique = true)
 })
 public class BookingEntity {
 

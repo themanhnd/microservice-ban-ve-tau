@@ -8,8 +8,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Kafka consumer for OrderConfirmedEvent.
- * When an order is confirmed, updates the corresponding booking status to CONFIRMED.
+ * Kafka consumer nhận sự kiện OrderConfirmedEvent.
+ * Khi đơn hàng được xác nhận, consumer cập nhật booking tương ứng sang trạng thái CONFIRMED.
  */
 @Slf4j
 @Component
@@ -27,7 +27,7 @@ public class OrderConfirmedEventConsumer {
         log.info("Received OrderConfirmedEvent: orderId={}, userId={}, correlationId={}",
                 event.getOrderId(), event.getUserId(), event.getCorrelationId());
         try {
-            bookingService.confirmBookingByOrderNo(event.getOrderId());
+            bookingService.confirmBookingFromOrder(event);
             log.info("Successfully processed OrderConfirmedEvent for orderId={}", event.getOrderId());
         } catch (Exception e) {
             log.error("Failed to process OrderConfirmedEvent for orderId={}: {}",

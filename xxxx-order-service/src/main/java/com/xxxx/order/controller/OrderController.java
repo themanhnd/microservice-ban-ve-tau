@@ -37,8 +37,10 @@ public class OrderController {
     @PreAuthorize("authenticated()")
     public ApiResponse<OrderResponse> placeOrder(
             @Valid @RequestBody PlaceOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal AuthenticatedUser user) {
         request.setUserId(String.valueOf(user.userId()));
+        request.setIdempotencyKey(idempotencyKey);
         log.info("Placing order for userId: {}, ticketDetailId: {}, quantity: {}",
                 request.getUserId(), request.getTicketDetailId(), request.getQuantity());
         OrderResponse response = orderService.placeOrder(request);
@@ -63,6 +65,15 @@ public class OrderController {
         log.info("Getting order status for orderNo: {}", orderNo);
         OrderStatusResponse response = orderService.getOrderStatus(orderNo);
         return ApiResponse.ok(response);
+    }
+
+    @Operation(summary = "Get checkout information", description = "Get checkout state for frontend polling and redirect")
+    @GetMapping("/{orderNo}/checkout")
+    @PreAuthorize("@orderAuthorization.canAccessOrder(#orderNo, authentication)")
+    public ApiResponse<OrderStatusResponse> getCheckoutInfo(
+            @Parameter(description = "Order number") @PathVariable String orderNo) {
+        log.info("Getting checkout info for orderNo: {}", orderNo);
+        return ApiResponse.ok(orderService.getCheckoutInfo(orderNo));
     }
 
     @Operation(summary = "Get orders by user", description = "Get paginated list of orders for a specific user")

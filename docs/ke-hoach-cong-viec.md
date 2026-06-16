@@ -134,6 +134,30 @@
 - [x] **D3. Dọn warning null-safety** của Spring `@NonNull` (chỉ cảnh báo, không lỗi).
 - [ ] **D4. Bổ sung integration test** với Testcontainers (MySQL + Redis + Kafka thật).
 
+### Nhóm E — Hoàn thiện flow end-to-end order/payment/booking — Ưu tiên: CAO
+
+- [x] **E1. Trigger payment sau inventory reserved**
+      - Sau khi nhận `inventory.reserved`, `order-service` gọi `payment-service /api/payment/initiate`.
+      - Lưu `paymentTransactionId`, `paymentUrl` vào order để frontend checkout được.
+      - Nếu payment initiate fail, chuyển order sang huỷ có compensation.
+- [x] **E2. Bổ sung checkout/status response cho frontend**
+      - Mở rộng `OrderStatusResponse`/`OrderResponse` để trả `paymentTransactionId`, `paymentUrl`,
+        `queueStatus`, `failureReason` khi cần.
+      - Frontend có thể poll endpoint status để biết đang queue, được thanh toán, hay đã confirm.
+- [x] **E3. Compensation inventory qua Kafka**
+      - Thêm consumer `order.cancelled` trong `inventory-service`.
+      - Khi `compensationRequired=true`, release stock idempotent cho order đã reserve.
+- [x] **E4. Hoàn thiện booking lifecycle gắn với order**
+      - `booking-service` nhận `order.confirmed` sẽ upsert booking `CONFIRMED` theo `orderNo`.
+      - Khi order huỷ, booking liên quan (nếu đã tạo) chuyển `CANCELLED`.
+- [x] **E5. Đồng bộ waiting-room expiry với order status**
+      - Khi token queue hết hạn, order chuyển sang `EXPIRED` kèm failure reason rõ ràng.
+      - Frontend không bị kẹt ở `QUEUED` vô thời hạn.
+- [x] **E6. Test bắt buộc cho flow end-to-end**
+      - `inventory.reserved` -> payment initiated -> order status có `paymentUrl`.
+      - `payment.failed` -> publish `order.cancelled` -> inventory release.
+      - `payment.completed` -> order confirmed -> booking confirmed/upsert.
+      - waiting-room token expire -> order expire.
 ---
 
 ## 🧭 Gợi ý thứ tự tiếp theo
@@ -170,3 +194,35 @@ git push
 - Remote: `origin` → https://github.com/themanhnd/microservice-ban-ve-tau
 - Nhánh: `main` (đã set upstream)
 - Commit gần nhất: `feat(inventory): implement DB-based stock calculation and Redis rehydration`
+
+### Nhóm F — Độ tin cậy checkout/order saga — Ưu tiên: RẤT CAO
+
+- [x] **F1. Idempotency key cho /api/orders/place**
+  - Nhận header `Idempotency-Key` từ frontend.
+  - Lưu key theo user/order để double-click hoặc retry không tạo nhiều order.
+  - Trả lại order đã tạo nếu request lặp cùng key.
+- [x] **F2. Payment timeout auto-cancel**
+  - Worker định kỳ tìm order `PAYMENT_PROCESSING` quá X phút.
+  - Chuyển order sang `CANCELLED` và phát `order.cancelled` để release inventory.
+- [x] **F3. Idempotent consumers cho Kafka at-least-once**
+  - Guard `inventory.reserved`, `inventory.reserve-failed`, `payment.completed`, `payment.failed` theo trạng thái order.
+  - Booking `order.confirmed` upsert theo `orderNo` và đảm bảo unique ở DB.
+- [x] **F4. Endpoint checkout rõ ràng cho frontend**
+  - Thêm `GET /api/orders/{orderNo}/checkout` trả `status`, `queuePosition`, `paymentUrl`, `expiresAt`, `failureReason`.
+  - Frontend dùng endpoint này để polling/redirect thay vì tự ghép nhiều API.
+- [x] **F5. Outbox/retry/DLQ cho Kafka publish**
+  - Đã mở rộng outbox sang các service có producer: `order-service`, `inventory-service`, `payment-service`.
+  - Producer chỉ ghi event vào outbox trong transaction DB; publisher định kỳ mới gửi Kafka sau commit.
+  - Worker retry theo `nextRetryAt`, tăng `attemptCount`, lưu `lastError` để dễ vận hành.
+  - Trạng thái `FAILED` đóng vai trò DLQ nội bộ trong DB khi publish lỗi quá số lần cho phép.
+  - Các lớp chính: `OrderOutboxPublisher`, `InventoryOutboxPublisher`, `PaymentOutboxPublisher`.
+  - Test đã bao phủ enqueue event, publish thành công và retry/fail path cho từng service.
+
+### Ghi chú triển khai tiếp theo
+
+- [ ] **Migration DB chính thức**
+  - Hiện entity mới dựa vào JPA auto-DDL; trước production cần thêm Flyway/Liquibase migration cho bảng outbox, cột order timeout/idempotency và unique index booking/order.
+- [ ] **Vận hành DLQ nội bộ**
+  - Bổ sung endpoint/admin job để xem, replay hoặc bỏ qua outbox record trạng thái `FAILED`.
+- [ ] **Metrics/alerting cho outbox**
+  - Theo dõi số record `PENDING/RETRY/FAILED`, tuổi record cũ nhất và số lần retry để cảnh báo kẹt publish.

@@ -5,15 +5,17 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Objects;
 
 /**
- * Event published when an order is cancelled (due to payment failure or other reasons).
+ * Sự kiện được phát khi đơn hàng bị hủy (do lỗi thanh toán hoặc nguyên nhân khác).
  * Producer: Order Service
- * Consumer: Inventory Service (to release reserved stock)
+ * Consumer: Inventory Service (để hoàn lại tồn kho đã giữ), Booking Service (để hủy booking)
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class OrderCancelledEvent extends BaseEvent {
 
     private String orderId;
     private String userId;
+    private String ticketDetailId;
+    private Integer quantity;
     private String reason;
     private boolean compensationRequired;
 
@@ -43,6 +45,22 @@ public class OrderCancelledEvent extends BaseEvent {
         this.userId = userId;
     }
 
+    public String getTicketDetailId() {
+        return ticketDetailId;
+    }
+
+    public void setTicketDetailId(String ticketDetailId) {
+        this.ticketDetailId = ticketDetailId;
+    }
+
+    public Integer getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
+    }
+
     public String getReason() {
         return reason;
     }
@@ -68,12 +86,14 @@ public class OrderCancelledEvent extends BaseEvent {
         return compensationRequired == that.compensationRequired &&
                 Objects.equals(orderId, that.orderId) &&
                 Objects.equals(userId, that.userId) &&
+                Objects.equals(ticketDetailId, that.ticketDetailId) &&
+                Objects.equals(quantity, that.quantity) &&
                 Objects.equals(reason, that.reason);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderId, userId, reason, compensationRequired);
+        return Objects.hash(super.hashCode(), orderId, userId, ticketDetailId, quantity, reason, compensationRequired);
     }
 
     @Override
@@ -81,6 +101,8 @@ public class OrderCancelledEvent extends BaseEvent {
         return "OrderCancelledEvent{" +
                 "orderId='" + orderId + '\'' +
                 ", userId='" + userId + '\'' +
+                ", ticketDetailId='" + ticketDetailId + '\'' +
+                ", quantity=" + quantity +
                 ", reason='" + reason + '\'' +
                 ", compensationRequired=" + compensationRequired +
                 "} " + super.toString();

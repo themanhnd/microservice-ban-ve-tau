@@ -30,4 +30,8 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
      * @return Page chứa danh sách OrderEntity
      */
     Page<OrderEntity> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
+
+    Optional<OrderEntity> findByUserIdAndIdempotencyKey(String userId, String idempotencyKey);
+
+    java.util.List<OrderEntity> findByStatusAndPaymentExpiresAtBefore(String status, java.time.LocalDateTime paymentExpiresAt);
 }

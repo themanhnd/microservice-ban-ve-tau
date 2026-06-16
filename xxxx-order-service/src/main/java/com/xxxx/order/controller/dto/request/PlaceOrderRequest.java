@@ -38,4 +38,7 @@ public class PlaceOrderRequest {
     @NotNull(message = "totalAmount is required")
     @Schema(description = "Tổng số tiền đơn hàng", example = "500000.00")
     private BigDecimal totalAmount;
+
+    @Schema(description = "Khóa idempotency từ header Idempotency-Key để chống tạo trùng đơn")
+    private String idempotencyKey;
 }
