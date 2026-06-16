@@ -193,7 +193,7 @@ git push
 
 - Remote: `origin` → https://github.com/themanhnd/microservice-ban-ve-tau
 - Nhánh: `main` (đã set upstream)
-- Commit gần nhất: `feat(inventory): implement DB-based stock calculation and Redis rehydration`
+- Commit gần nhất: `feat: harden order saga reliability`
 
 ### Nhóm F — Độ tin cậy checkout/order saga — Ưu tiên: RẤT CAO
 
@@ -226,3 +226,36 @@ git push
   - Bổ sung endpoint/admin job để xem, replay hoặc bỏ qua outbox record trạng thái `FAILED`.
 - [ ] **Metrics/alerting cho outbox**
   - Theo dõi số record `PENDING/RETRY/FAILED`, tuổi record cũ nhất và số lần retry để cảnh báo kẹt publish.
+
+
+### Nhóm G — Việc cần làm tiếp sau F5 — Ưu tiên: CAO
+
+- [ ] **G1. Thêm migration DB chính thức cho saga/outbox**
+  - Thêm Flyway/Liquibase migration cho bảng outbox của `order-service`, `inventory-service`, `payment-service`.
+  - Thêm migration cho `idempotencyKey`, `paymentExpiresAt`, `paymentTransactionId`, `paymentUrl`, `failureReason` nếu production DB chưa có.
+  - Thêm unique index cho booking theo `orderNo` và index truy vấn outbox theo `status/nextAttemptAt`.
+- [ ] **G2. Admin endpoint/job để vận hành DLQ nội bộ**
+  - Liệt kê outbox record `FAILED` theo service/topic/thời gian.
+  - Cho phép replay record đã fail sau khi sửa lỗi hạ tầng.
+  - Có thao tác ignore/resolve kèm lý do để phục vụ audit.
+- [ ] **G3. Metrics và alerting cho outbox**
+  - Expose metric số lượng `PENDING`, `RETRY`, `FAILED` theo service/topic.
+  - Theo dõi tuổi record cũ nhất và số lần retry cao nhất.
+  - Bổ sung alert khi có `FAILED` hoặc outbox bị kẹt quá ngưỡng.
+- [ ] **G4. Integration test với Testcontainers**
+  - Chạy MySQL + Kafka + Redis thật để kiểm tra transaction DB commit trước khi publish Kafka.
+  - Test retry khi Kafka tạm thời down và publish lại khi Kafka phục hồi.
+  - Test consumer idempotent khi Kafka deliver duplicate event.
+- [ ] **G5. Rà soát encoding/tài liệu còn mojibake**
+  - Chuẩn hoá `README.md`, `docs/architecture.md`, `docs/ke-hoach-cong-viec.md` sang UTF-8 no BOM.
+  - Sửa các đoạn văn bản đã bị mojibake từ trước.
+- [ ] **G6. Security/rate limit cho endpoint checkout/order**
+  - Rate limit `POST /api/orders/place` theo user/IP để giảm spam double-click/retry ác ý.
+  - Xác thực quyền xem `GET /api/orders/{orderNo}/checkout` chỉ cho đúng user sở hữu order.
+  - Chuẩn hoá error response không lộ thông tin nội bộ.
+
+### Ghi chú cho lần làm tiếp
+
+- Ưu tiên làm G1 trước nếu chuẩn bị deploy production, vì entity hiện tại đang phụ thuộc JPA auto-DDL.
+- Sau G1, làm G2 + G3 để có khả năng vận hành/replay khi Kafka publish fail.
+- G4 nên làm trước khi refactor lớn tiếp theo để bắt lỗi end-to-end sớm.
