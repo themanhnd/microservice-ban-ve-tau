@@ -21,16 +21,22 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Controller quản lý API người dùng và vòng đời xác thực.
+ *
+ * <p>Đây là điểm vào cho frontend khi đăng ký, đăng nhập, refresh token, logout và lấy thông tin user.
+ * Sau khi login thành công, frontend dùng access token nhận được để gọi các API private qua Gateway.</p>
+ */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "User", description = "User management APIs")
+@Tag(name = "User", description = "API quản lý người dùng và xác thực")
 public class UserController {
 
     private final UserService userService;
 
-    @Operation(summary = "Login", description = "Authenticate user with username and password")
+    @Operation(summary = "Đăng nhập", description = "Xác thực username/password và trả access token + refresh token cho frontend")
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         log.info("Login attempt for user: {}", request.getUsername());
@@ -38,21 +44,21 @@ public class UserController {
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Refresh token", description = "Issue a new access token from a valid refresh token")
+    @Operation(summary = "Làm mới token", description = "Dùng refresh token hợp lệ để cấp access token mới")
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request, HttpServletRequest httpRequest) {
         TokenResponse response = userService.refresh(request, extractClientIp(httpRequest));
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Logout", description = "Revoke a refresh token")
+    @Operation(summary = "Đăng xuất", description = "Thu hồi refresh token để token đó không thể dùng tiếp")
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@Valid @RequestBody LogoutRequest request) {
         userService.logout(request);
         return ApiResponse.ok(null);
     }
 
-    @Operation(summary = "Register", description = "Register a new user account")
+    @Operation(summary = "Đăng ký", description = "Tạo tài khoản người dùng mới")
     @PostMapping("/register")
     public ApiResponse<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Registering new user: {}", request.getUsername());
@@ -60,17 +66,17 @@ public class UserController {
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Get user by ID", description = "Retrieve user information by user ID")
+    @Operation(summary = "Lấy user theo ID", description = "Admin xem được mọi user, user thường chỉ xem được chính mình")
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or #id == principal.userId")
     public ApiResponse<UserResponse> getUserById(
-            @Parameter(description = "User ID") @PathVariable Long id) {
+            @Parameter(description = "ID người dùng") @PathVariable Long id) {
         log.info("Fetching user by id: {}", id);
         UserResponse response = userService.getUserById(id);
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Get current user", description = "Retrieve current user information from X-User-Id header")
+    @Operation(summary = "Lấy user hiện tại", description = "Trả thông tin user đang đăng nhập dựa trên principal đã xác thực")
     @GetMapping("/me")
     public ApiResponse<UserResponse> getCurrentUser(
             @AuthenticationPrincipal AuthenticatedUser user) {
@@ -79,6 +85,11 @@ public class UserController {
         return ApiResponse.ok(response);
     }
 
+    /**
+     * Lấy IP thật của client để phục vụ rate limit/audit đăng nhập.
+     *
+     * <p>Khi đi qua proxy hoặc gateway, IP gốc thường nằm trong {@code X-Forwarded-For} hoặc {@code X-Real-IP}.</p>
+     */
     private String extractClientIp(HttpServletRequest request) {
         String forwardedFor = request.getHeader("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {

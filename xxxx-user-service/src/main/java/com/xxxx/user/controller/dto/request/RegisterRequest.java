@@ -10,6 +10,9 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+/**
+ * Request DTO cho API đăng ký tài khoản mới.
+ */
 public class RegisterRequest {
 
     @NotBlank(message = "Username is required")
@@ -24,7 +27,9 @@ public class RegisterRequest {
     @Size(min = 6, max = 100, message = "Password must be between 6 and 100 characters")
     private String password;
 
+    /** Họ tên hiển thị của người dùng. */
     private String fullName;
 
+    /** Số điện thoại nếu người dùng cung cấp. */
     private String phone;
 }

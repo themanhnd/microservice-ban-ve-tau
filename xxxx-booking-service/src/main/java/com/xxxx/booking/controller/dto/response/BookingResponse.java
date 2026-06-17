@@ -13,6 +13,12 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+/**
+ * Response DTO trả thông tin booking cho API.
+ *
+ * <p>Booking là kết quả cuối cùng sau khi order được xác nhận; response này cho frontend biết mã booking, vé nào,
+ * số lượng bao nhiêu và trạng thái hiện tại.</p>
+ */
 public class BookingResponse {
 
     private Long id;
@@ -29,6 +35,9 @@ public class BookingResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /**
+     * Chuyển BookingEntity sang DTO để tránh controller/service trả thẳng entity JPA ra ngoài API.
+     */
     public static BookingResponse fromEntity(BookingEntity entity) {
         return BookingResponse.builder()
                 .id(entity.getId())

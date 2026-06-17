@@ -6,6 +6,11 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entity lưu refresh token ở dạng đã hash.
+ *
+ * <p>Hệ thống không nên lưu refresh token thô trong DB. Entity này hỗ trợ rotate/revoke token an toàn hơn.</p>
+ */
 @Entity
 @Table(name = "refresh_tokens")
 @Getter

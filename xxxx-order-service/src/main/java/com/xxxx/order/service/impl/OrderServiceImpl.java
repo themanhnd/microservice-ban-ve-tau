@@ -38,7 +38,18 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Điều phối vòng đời đơn hàng: xếp hàng, giữ tồn kho, khởi tạo thanh toán và hoàn tất saga.
+ * Service điều phối toàn bộ vòng đời của một đơn hàng trong hệ thống.
+ *
+ * <p>Nếu người mới muốn hiểu luồng checkout của project, đây là một trong những class quan trọng nhất.
+ * Class này không tự xử lý hết mọi việc, mà đóng vai trò "nhạc trưởng" của Saga:</p>
+ *
+ * <ul>
+ *   <li>Nhận yêu cầu đặt vé từ controller.</li>
+ *   <li>Đưa order vào waiting room để tránh dồn tải đột ngột.</li>
+ *   <li>Phát event để inventory-service giữ tồn kho.</li>
+ *   <li>Khi giữ tồn kho thành công, gọi payment-service để tạo giao dịch thanh toán.</li>
+ *   <li>Khi thanh toán thành công/thất bại, cập nhật trạng thái order và phát event bù trừ nếu cần.</li>
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
@@ -68,7 +79,12 @@ public class OrderServiceImpl implements OrderService {
     private long paymentTimeoutMinutes;
 
     /**
-     * Tạo đơn mới và đưa vào waiting room trước khi phát sự kiện giữ vé.
+     * Tạo order mới và đưa order vào waiting room.
+     *
+     * <p>Method này chưa giữ vé ngay. Nó chỉ tạo order ở trạng thái chờ, sau đó worker waiting room
+     * sẽ lấy dần từng order vào Saga theo năng lực hệ thống.</p>
+     *
+     * <p>Nếu client retry với cùng {@code Idempotency-Key}, hệ thống trả về order cũ thay vì tạo thêm order mới.</p>
      */
     @Override
     @Transactional
@@ -93,6 +109,7 @@ public class OrderServiceImpl implements OrderService {
         log.info("Placing order: orderNo={}, userId={}, ticketDetailId={}, quantity={}, correlationId={}",
                 orderNo, request.getUserId(), request.getTicketDetailId(), request.getQuantity(), correlationId);
         // Lưu đơn ở trạng thái QUEUED để worker waiting room xử lý theo năng lực hệ thống.
+        // Đây là lớp đệm chống spike traffic: request vào nhanh nhưng Saga được mở dần có kiểm soát.
         OrderEntity order = OrderEntity.builder()
                 .orderNo(orderNo)
                 .userId(request.getUserId())
@@ -107,7 +124,7 @@ public class OrderServiceImpl implements OrderService {
         order = orderRepository.save(order);
         log.info("Order saved: id={}, orderNo={}", order.getId(), order.getOrderNo());
 
-        // Tạo token hàng đợi để client có thể theo dõi vị trí và trạng thái xử lý.
+        // Tạo token hàng đợi để frontend có thể polling biết request đang chờ, đang xử lý hay đã hết hạn.
         OrderQueueEntity queueEntity = OrderQueueEntity.builder()
                 .orderId(order.getId())
                 .token(queueToken)
@@ -120,7 +137,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Lấy chi tiết đơn hàng theo mã đơn.
+     * Lấy đầy đủ chi tiết của một order theo mã đơn.
+     *
+     * <p>Phù hợp cho trang chi tiết đơn hàng hoặc màn hình quản trị cần xem toàn bộ dữ liệu nghiệp vụ.</p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -130,7 +149,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Trả trạng thái hiện tại của đơn, bao gồm thông tin thanh toán và lỗi nếu có.
+     * Trả trạng thái hiện tại của order theo dạng gọn nhẹ hơn.
+     *
+     * <p>Frontend dùng dữ liệu này để biết đơn đang ở bước nào: xếp hàng, giữ vé, chờ thanh toán,
+     * thành công hay thất bại.</p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -153,7 +175,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Endpoint checkout dùng chung logic với status nhưng nhấn mạnh dữ liệu frontend cần để polling/redirect.
+     * Trả dữ liệu checkout để frontend polling và redirect thanh toán.
+     *
+     * <p>Response của method này gom các thông tin UI cần nhất: trạng thái Saga, payment URL nếu đã có,
+     * vị trí queue nếu còn chờ, thời điểm hết hạn và lý do thất bại nếu order bị hủy.</p>
      */
     @Override
     @Transactional(readOnly = true)
@@ -175,7 +200,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Worker định kỳ dọn token hết hạn và đẩy một batch đơn từ waiting room sang bước giữ vé.
+     * Worker định kỳ dọn token hết hạn và đẩy một batch order từ waiting room sang bước giữ vé.
+     *
+     * <p>Method này là "cửa van" điều tiết tải. Nó vừa loại bỏ các request chờ quá lâu, vừa đảm bảo số order
+     * đang PROCESSING không vượt quá ngưỡng cấu hình.</p>
      */
     @Scheduled(fixedDelayString = "${order.waiting-room.worker-delay-ms:1000}")
     @Transactional
@@ -200,6 +228,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // Giới hạn số đơn PROCESSING cùng lúc để bảo vệ inventory/payment khỏi spike traffic.
+        // Mục tiêu là giữ hệ thống ổn định và công bằng hơn khi có lượng lớn người dùng cùng mua vé.
         long processingCount = orderQueueRepository.countByStatus(QUEUE_PROCESSING);
         int capacity = (int) Math.max(0, maxProcessingOrders - processingCount);
         if (capacity == 0) {
@@ -217,6 +246,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             // Chuyển đơn sang PROCESSING rồi phát order.placed để inventory bắt đầu giữ vé.
+            // Từ đây đơn hàng chính thức đi vào luồng Saga liên service.
             queueItem.setStatus(QUEUE_PROCESSING);
             orderQueueRepository.save(queueItem);
 
@@ -231,6 +261,8 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * Worker định kỳ hủy các order đang chờ thanh toán quá hạn và phát compensation trả vé.
+     *
+     * <p>Không có worker này thì vé đã reserve có thể bị kẹt nếu người dùng không hoàn tất thanh toán.</p>
      */
     @Scheduled(fixedDelayString = "${order.payment.timeout-worker-delay-ms:60000}")
     @Transactional
@@ -252,7 +284,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Hủy đơn từ yêu cầu người dùng và phát sự kiện bù trừ nếu vé đã được giữ.
+     * Hủy order từ yêu cầu người dùng/admin và phát sự kiện bù trừ nếu vé đã được giữ.
+     *
+     * <p>Người mới cần chú ý: hủy order không chỉ là đổi trạng thái trong DB order. Nếu inventory đã reserve,
+     * hệ thống còn phải thông báo cho inventory-service release số vé đó.</p>
      */
     @Override
     @Transactional
@@ -289,7 +324,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Xử lý sự kiện inventory.reserved và khởi tạo thanh toán ngay sau khi giữ vé thành công.
+     * Xử lý sự kiện {@code inventory.reserved} và khởi tạo thanh toán sau khi giữ vé thành công.
+     *
+     * <p>Đây là điểm chuyển tiếp từ bước inventory sang bước payment trong Saga. Nếu gọi payment-service lỗi,
+     * order sẽ bị hủy và inventory cần được release qua compensation.</p>
      */
     @Transactional
     public void handleInventoryReserved(String orderNo) {
@@ -309,13 +347,16 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
 
         // Payment URL được lưu lại để API trạng thái trả về cho client tiếp tục thanh toán.
+        // Frontend chỉ cần đọc paymentUrl từ checkout info rồi redirect người dùng sang VnPay.
         initiatePayment(order);
 
         log.info("Order payment initiated after inventory reservation: orderNo={}", orderNo);
     }
 
     /**
-     * Xử lý giữ vé thất bại: kết thúc saga ở trạng thái FAILED/CANCELLED.
+     * Xử lý giữ vé thất bại: kết thúc Saga ở trạng thái FAILED/CANCELLED.
+     *
+     * <p>Nhánh này thường xảy ra khi hết vé hoặc inventory-service không thể reserve đúng số lượng yêu cầu.</p>
      */
     @Transactional
     public void handleInventoryReserveFailed(String orderNo, String reason) {
@@ -335,7 +376,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Xử lý thanh toán thành công, xác nhận đơn và phát sự kiện tạo/xác nhận booking.
+     * Xử lý thanh toán thành công, xác nhận order và phát sự kiện tạo/xác nhận booking.
+     *
+     * <p>Sau khi nhận {@code payment.completed}, order-service trở thành nguồn phát {@code order.confirmed}
+     * để booking-service tạo dữ liệu booking cuối cùng cho người dùng.</p>
      */
     @Transactional
     public void handlePaymentCompleted(String orderNo, String transactionId) {
@@ -370,7 +414,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Xử lý thanh toán thất bại và phát order.cancelled để các service downstream bù trừ.
+     * Xử lý thanh toán thất bại và phát {@code order.cancelled} để các service downstream bù trừ.
+     *
+     * <p>Event hủy order giúp inventory-service biết cần release tồn kho và booking-service biết cần hủy booking nếu đã có.</p>
      */
     @Transactional
     public void handlePaymentFailed(String orderNo, String reason) {
@@ -387,6 +433,7 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
         completeQueueItem(order);
         // Thanh toán fail luôn cần compensation vì inventory đã reserve trước đó.
+        // Nếu bỏ qua bước này, hệ thống sẽ giữ "ảo" số vé đã reserve và làm sai tồn kho còn bán được.
         OrderCancelledEvent event = new OrderCancelledEvent();
         event.setOrderId(orderNo);
         event.setUserId(order.getUserId());
@@ -401,7 +448,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Hủy order hết hạn thanh toán và phát sự kiện compensation giống payment.failed.
+     * Hủy order hết hạn thanh toán và phát compensation giống nhánh {@code payment.failed}.
+     *
+     * <p>Timeout được xem như một dạng thất bại thanh toán để luồng bù trừ chạy thống nhất.</p>
      */
     private void cancelPaymentExpiredOrder(OrderEntity order) {
         order.setStatus("CANCELLED");
@@ -422,7 +471,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Phát sự kiện order.placed để inventory-service giữ vé theo ticketDetailId và quantity.
+     * Phát sự kiện {@code order.placed} để inventory-service giữ vé theo {@code ticketDetailId} và {@code quantity}.
+     *
+     * <p>Producer hiện ghi event vào outbox trước, worker outbox mới publish Kafka sau khi transaction DB commit.</p>
      */
     private void publishOrderPlaced(OrderEntity order) {
         OrderPlacedEvent event = new OrderPlacedEvent();
@@ -439,6 +490,8 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * Khởi tạo giao dịch thanh toán sau khi inventory đã giữ vé thành công.
+     *
+     * <p>Thông tin trả về gồm transactionId và paymentUrl; order lưu lại để frontend có thể redirect người dùng sang VnPay.</p>
      */
     private void initiatePayment(OrderEntity order) {
         // Gọi payment-service theo orderNo để callback/payment event có thể map ngược về đơn hàng.
@@ -482,6 +535,8 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * Đánh dấu queue item đã hoàn tất để đóng vòng đời waiting room.
+     *
+     * <p>Sau khi order đi ra khỏi giai đoạn chờ và hoàn tất một nhánh xử lý chính, queue item không còn cần ở trạng thái chờ nữa.</p>
      */
     private void completeQueueItem(OrderEntity order) {
         orderQueueRepository.findByOrderId(order.getId())
@@ -492,7 +547,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Chuẩn hóa idempotency key từ header; chuỗi rỗng được xem như không gửi key.
+     * Chuẩn hóa idempotency key từ header/request.
+     *
+     * <p>Nếu giá trị rỗng hoặc chỉ có khoảng trắng thì xem như client không gửi key.</p>
      */
     private String normalizeIdempotencyKey(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -511,7 +568,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Tìm đơn theo orderNo và chuẩn hóa lỗi không tìm thấy.
+     * Tìm order theo mã đơn và chuẩn hóa lỗi khi không tìm thấy.
+     *
+     * <p>Tách riêng thành helper để các method khác không lặp lại cùng một đoạn truy vấn + ném exception.</p>
      */
     private OrderEntity findOrderByOrderNo(String orderNo) {
         return orderRepository.findByOrderNo(orderNo)
@@ -519,7 +578,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Map entity sang DTO trả về cho API.
+     * Chuyển entity database sang DTO trả về cho API.
+     *
+     * <p>DTO này là thứ frontend nhìn thấy, nên ngoài trạng thái order còn gom thêm queue token, queue status,
+     * correlation id và dữ liệu phục vụ màn hình checkout.</p>
      */
     private OrderResponse mapToResponse(OrderEntity order) {
         return mapToResponse(order, null, null);
@@ -547,7 +609,9 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Tính vị trí queue gần đúng cho order đang WAITING.
+     * Tính vị trí hàng chờ gần đúng cho order đang ở trạng thái WAITING.
+     *
+     * <p>Giá trị này chủ yếu phục vụ trải nghiệm UI, không phải số liệu tuyệt đối chính xác tại mọi thời điểm.</p>
      */
     private Integer calculateQueuePosition(OrderQueueEntity queueEntity) {
         if (queueEntity == null || !Integer.valueOf(QUEUE_WAITING).equals(queueEntity.getStatus())) {
@@ -557,7 +621,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Tính thời điểm hết hạn tương ứng với trạng thái checkout hiện tại.
+     * Xác định thời điểm hết hạn phù hợp với trạng thái checkout hiện tại.
+     *
+     * <p>Nếu order đang chờ thanh toán thì dùng {@code paymentExpiresAt}; nếu còn trong waiting room thì
+     * hạn dùng được tính từ lúc token hàng đợi được tạo.</p>
      */
     private LocalDateTime resolveExpiresAt(OrderEntity order, OrderQueueEntity queueEntity) {
         if ("PAYMENT_PROCESSING".equals(order.getStatus())) {
@@ -570,7 +637,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * Chuyển mã trạng thái queue dạng số sang chuỗi dễ đọc cho client.
+     * Chuyển mã trạng thái queue dạng số trong DB sang chuỗi dễ đọc cho client.
      */
     private String mapQueueStatus(OrderQueueEntity queueEntity) {
         if (queueEntity == null) {
@@ -587,6 +654,8 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * Tạo thông điệp trạng thái ngắn gọn cho màn hình theo dõi đơn.
+     *
+     * <p>Mục tiêu là giúp frontend hiển thị câu mô tả dễ hiểu thay vì chỉ dựa vào mã trạng thái kỹ thuật.</p>
      */
     private String getStatusMessage(String status) {
         return switch (status) {

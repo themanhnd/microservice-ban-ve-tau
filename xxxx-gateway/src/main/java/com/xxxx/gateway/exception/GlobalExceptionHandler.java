@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Global exception handler for the API Gateway.
- * Handles service unavailability, timeouts, and other errors,
+ * Bộ xử lý exception tập trung của API Gateway, chuẩn hóa lỗi trước khi trả về client.
+ * Xử lý lỗi service không khả dụng, timeout và các lỗi gateway khác,
  * returning structured JSON error responses using ApiResponse format.
  */
 @Slf4j

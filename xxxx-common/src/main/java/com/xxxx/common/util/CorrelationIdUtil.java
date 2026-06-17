@@ -17,7 +17,7 @@ public final class CorrelationIdUtil {
     }
 
     /**
-     * Generate a new correlation ID (UUID string).
+     * Tạo correlation ID mới dạng UUID để gắn vào request và truy vết xuyên suốt hệ thống.
      *
      * @return a new UUID-based correlation ID
      */

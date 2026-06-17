@@ -4,8 +4,8 @@ import com.xxxx.common.response.ApiResponse;
 import org.springframework.stereotype.Component;
 
 /**
- * Fallback implementation for PaymentServiceClient.
- * Returns error response when Payment Service is unavailable.
+ * Fallback cho PaymentServiceClient khi Payment Service không phản hồi.
+ * Trả về phản hồi lỗi thống nhất để Order Service biết chưa thể tạo thanh toán.
  */
 @Component
 public class PaymentServiceClientFallback implements PaymentServiceClient {

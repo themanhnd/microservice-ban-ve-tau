@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
- * Feign client for communicating with Payment Service.
+ * Feign client dùng để gọi đồng bộ sang Payment Service.
  */
 @FeignClient(name = "xxxx-payment-service", fallback = PaymentServiceClientFallback.class)
 public interface PaymentServiceClient {

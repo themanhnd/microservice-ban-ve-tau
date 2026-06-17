@@ -15,7 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** Worker publish outbox event của inventory-service sang Kafka, có retry/backoff. */
+/**
+ * Worker publish event từ bảng outbox của Inventory Service ra Kafka.
+ *
+ * <p>Khi reserve/release stock thành công hoặc thất bại, inventory-service ghi event vào outbox thay vì publish Kafka
+ * trực tiếp trong transaction. Worker này sẽ publish sau commit để bảo đảm tính nhất quán.</p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -36,7 +41,11 @@ public class InventoryOutboxPublisher {
     public int publishDueEvents() {
         List<InventoryEventOutboxEntity> events = outboxRepository.findByStatusInAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(List.of(STATUS_PENDING, STATUS_RETRY), LocalDateTime.now(), PageRequest.of(0, batchSize));
         int published = 0;
-        for (InventoryEventOutboxEntity event : events) { if (publishOne(event)) published++; }
+        for (InventoryEventOutboxEntity event : events) {
+            if (publishOne(event)) {
+                published++;
+            }
+        }
         return published;
     }
 
@@ -44,14 +53,32 @@ public class InventoryOutboxPublisher {
         try {
             Object event = objectMapper.readValue(outboxEvent.getPayload(), Class.forName(outboxEvent.getEventType()));
             kafkaTemplate.send(outboxEvent.getTopic(), outboxEvent.getEventKey(), event).get();
-            outboxEvent.setStatus(STATUS_PUBLISHED); outboxEvent.setPublishedAt(LocalDateTime.now()); outboxEvent.setLastError(null); outboxRepository.save(outboxEvent); return true;
+            outboxEvent.setStatus(STATUS_PUBLISHED);
+            outboxEvent.setPublishedAt(LocalDateTime.now());
+            outboxEvent.setLastError(null);
+            outboxRepository.save(outboxEvent);
+            return true;
         } catch (Exception e) {
             int attempts = outboxEvent.getAttemptCount() == null ? 1 : outboxEvent.getAttemptCount() + 1;
-            outboxEvent.setAttemptCount(attempts); outboxEvent.setLastError(truncate(e.getMessage()));
-            if (attempts >= maxAttempts) { outboxEvent.setStatus(STATUS_FAILED); } else { outboxEvent.setStatus(STATUS_RETRY); outboxEvent.setNextAttemptAt(LocalDateTime.now().plusSeconds(retryDelaySeconds)); }
-            outboxRepository.save(outboxEvent); log.warn("Failed to publish inventory outbox event: id={}, attempts={}, status={}, error={}", outboxEvent.getId(), attempts, outboxEvent.getStatus(), e.getMessage()); return false;
+            outboxEvent.setAttemptCount(attempts);
+            outboxEvent.setLastError(truncate(e.getMessage()));
+            if (attempts >= maxAttempts) {
+                outboxEvent.setStatus(STATUS_FAILED);
+            } else {
+                outboxEvent.setStatus(STATUS_RETRY);
+                outboxEvent.setNextAttemptAt(LocalDateTime.now().plusSeconds(retryDelaySeconds));
+            }
+            outboxRepository.save(outboxEvent);
+            log.warn("Failed to publish inventory outbox event: id={}, attempts={}, status={}, error={}",
+                    outboxEvent.getId(), attempts, outboxEvent.getStatus(), e.getMessage());
+            return false;
         }
     }
 
-    private String truncate(String message) { if (message == null) return null; return message.length() <= 1024 ? message : message.substring(0, 1024); }
+    private String truncate(String message) {
+        if (message == null) {
+            return null;
+        }
+        return message.length() <= 1024 ? message : message.substring(0, 1024);
+    }
 }

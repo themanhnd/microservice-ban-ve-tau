@@ -1,4 +1,4 @@
 /**
- * REST controllers for the Inventory service.
+ * Chứa REST controller của Inventory Service.
  */
 package com.xxxx.inventory.controller;

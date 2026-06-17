@@ -14,8 +14,8 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Helper service for VnPay URL generation and signature validation.
- * Handles HMAC-SHA512 signing and URL construction for VnPay gateway.
+ * Service hỗ trợ tạo URL thanh toán VnPay và kiểm tra chữ ký callback.
+ * Tập trung logic ký HMAC-SHA512 để tránh lặp code và hạn chế sai lệch tham số khi tích hợp VnPay.
  */
 @Service
 @Slf4j
@@ -36,13 +36,13 @@ public class VnPayService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     /**
-     * Generate VnPay payment URL for a transaction.
+     * Tạo URL thanh toán VnPay cho một giao dịch.
      *
      * @param txnRef transaction reference (used as vnp_TxnRef)
      * @param amount payment amount in VND
      * @param orderInfo order description
-     * @param clientIp client IP address sent to VnPay as vnp_IpAddr
-     * @return full VnPay payment URL with signature
+     * @param clientIp địa chỉ IP của người dùng, gửi sang VnPay dưới tham số vnp_IpAddr
+     * @return URL thanh toán đầy đủ đã kèm chữ ký bảo mật
      */
     public String createPaymentUrl(String txnRef, long amount, String orderInfo, String clientIp) {
         try {
@@ -61,7 +61,7 @@ public class VnPayService {
             vnpParams.put("vnp_IpAddr", normalizeClientIp(clientIp));
             vnpParams.put("vnp_CreateDate", DATE_FORMATTER.format(LocalDateTime.now()));
 
-            // Build hash data and query string from sorted params
+            // Sắp xếp tham số theo key rồi tạo chuỗi hashData và query string đúng chuẩn VnPay.
             StringBuilder hashData = new StringBuilder();
             StringBuilder query = new StringBuilder();
 
@@ -81,7 +81,7 @@ public class VnPayService {
             String hashDataStr = hashData.substring(0, hashData.length() - 1);
             String queryStr = query.substring(0, query.length() - 1);
 
-            // Generate HMAC-SHA512 signature
+            // Tạo chữ ký HMAC-SHA512 cho bộ tham số gửi sang VnPay.
             String secureHash = hmacSHA512(secretKey, hashDataStr);
 
             return vnpPaymentUrl + "?" + queryStr + "&vnp_SecureHash=" + secureHash;
@@ -92,15 +92,15 @@ public class VnPayService {
     }
 
     /**
-     * Validate VnPay callback signature.
+     * Kiểm tra chữ ký callback do VnPay gửi về.
      *
      * @param params all callback parameters (excluding vnp_SecureHash)
-     * @param receivedHash the vnp_SecureHash value from callback
+     * @param receivedHash giá trị vnp_SecureHash nhận được từ callback
      * @return true if signature is valid
      */
     public boolean validateSignature(Map<String, String> params, String receivedHash) {
         try {
-            // Build hash data from sorted params (excluding vnp_SecureHash and vnp_SecureHashType)
+            // Tạo hashData từ tham số đã sắp xếp, bỏ vnp_SecureHash và vnp_SecureHashType theo quy định VnPay.
             TreeMap<String, String> sortedParams = new TreeMap<>(params);
             sortedParams.remove("vnp_SecureHash");
             sortedParams.remove("vnp_SecureHashType");
@@ -129,7 +129,7 @@ public class VnPayService {
     }
 
     /**
-     * Generate HMAC-SHA512 hash.
+     * Tạo chuỗi hash HMAC-SHA512 từ secret key và dữ liệu đã chuẩn hóa.
      */
     private String hmacSHA512(String key, String data) {
         try {

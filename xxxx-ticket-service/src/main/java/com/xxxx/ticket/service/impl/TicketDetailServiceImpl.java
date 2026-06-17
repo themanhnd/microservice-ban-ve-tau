@@ -33,7 +33,7 @@ public class TicketDetailServiceImpl implements TicketDetailService {
     public List<TicketDetailResponse> getDetailsByTicketId(Long ticketId) {
         log.info("Getting all active details for ticket id: {}", ticketId);
 
-        // Validate ticket exists
+        // Kiểm tra ticket tồn tại trước khi thao tác với chi tiết vé.
         ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket", ticketId));
 
@@ -59,7 +59,7 @@ public class TicketDetailServiceImpl implements TicketDetailService {
     public TicketDetailResponse createDetail(CreateTicketDetailRequest request) {
         log.info("Creating ticket detail for ticket id: {}", request.getTicketId());
 
-        // Validate ticket exists
+        // Kiểm tra ticket tồn tại trước khi thao tác với chi tiết vé.
         TicketEntity ticket = ticketRepository.findById(request.getTicketId())
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket", request.getTicketId()));
 
@@ -119,7 +119,7 @@ public class TicketDetailServiceImpl implements TicketDetailService {
         log.info("Soft deleted ticket detail with id: {}", id);
     }
 
-    // ========== PRIVATE HELPER METHODS ==========
+    // ========== Các hàm hỗ trợ nội bộ ==========
 
     private TicketDetailResponse mapToResponse(TicketDetailEntity entity) {
         return TicketDetailResponse.builder()

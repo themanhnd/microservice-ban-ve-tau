@@ -1,4 +1,4 @@
 /**
- * Spring Data JPA repositories for the Inventory service.
+ * Chứa các repository Spring Data JPA của Inventory Service.
  */
 package com.xxxx.inventory.repository;

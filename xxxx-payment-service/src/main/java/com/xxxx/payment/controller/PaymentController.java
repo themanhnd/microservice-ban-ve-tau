@@ -18,11 +18,11 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * REST controller for payment operations.
- * Handles payment initiation, VnPay callbacks, and payment status queries.
+ * Xử lý khởi tạo thanh toán, callback/return từ VnPay và truy vấn trạng thái giao dịch.
  */
 @RestController
 @RequestMapping("/api/payment")
-@Tag(name = "Payment", description = "Payment transaction management and VnPay integration")
+@Tag(name = "Payment", description = "API quản lý giao dịch thanh toán và tích hợp VnPay")
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentController {
@@ -31,10 +31,10 @@ public class PaymentController {
 
     /**
      * Initiate a payment transaction.
-     * Called by Order Service via Feign client.
+     * Được Order Service gọi qua Feign client khi cần khởi tạo thanh toán.
      */
     @PostMapping("/initiate")
-    @Operation(summary = "Initiate payment", description = "Create a new payment transaction and generate VnPay payment URL")
+    @Operation(summary = "Khởi tạo thanh toán", description = "Tạo transaction nội bộ và sinh URL VnPay để frontend chuyển hướng người dùng")
     public ResponseEntity<ApiResponse<PaymentInitiateResponse>> initiatePayment(
             @Valid @RequestBody InitiatePaymentRequest request,
             HttpServletRequest httpRequest) {
@@ -45,10 +45,10 @@ public class PaymentController {
 
     /**
      * VnPay IPN (Instant Payment Notification) callback.
-     * Called by VnPay gateway to notify payment result.
+     * Được cổng VnPay gọi để thông báo kết quả thanh toán theo cơ chế IPN.
      */
     @PostMapping("/vnpay-callback")
-    @Operation(summary = "VnPay IPN callback", description = "Handle VnPay Instant Payment Notification")
+    @Operation(summary = "VnPay IPN callback", description = "Endpoint server-to-server để VnPay thông báo kết quả thanh toán")
     public ResponseEntity<ApiResponse<String>> vnPayCallback(@RequestBody VnPayCallbackRequest request) {
         log.info("Received VnPay callback for txnRef={}, responseCode={}",
                 request.getVnp_TxnRef(), request.getVnp_ResponseCode());
@@ -61,7 +61,7 @@ public class PaymentController {
      * User is redirected here after completing payment on VnPay.
      */
     @GetMapping("/vnpay-return")
-    @Operation(summary = "VnPay return URL", description = "Handle user redirect from VnPay after payment")
+    @Operation(summary = "VnPay return URL", description = "Endpoint nhận redirect của trình duyệt người dùng sau khi thanh toán")
     public ResponseEntity<ApiResponse<PaymentStatusResponse>> vnPayReturn(
             @RequestParam("vnp_TxnRef") String txnRef,
             @RequestParam("vnp_ResponseCode") String responseCode,
@@ -73,10 +73,10 @@ public class PaymentController {
     }
 
     /**
-     * Get payment status by transaction ID.
+     * Lấy trạng thái thanh toán theo transaction ID nội bộ.
      */
     @GetMapping("/{transactionId}")
-    @Operation(summary = "Get payment status", description = "Query payment transaction status by transaction ID")
+    @Operation(summary = "Lấy trạng thái thanh toán", description = "Tra cứu transaction theo transactionId nội bộ")
     @PreAuthorize("@paymentAuthorization.canAccessTransaction(#transactionId, authentication)")
     public ResponseEntity<ApiResponse<PaymentStatusResponse>> getPaymentStatus(
             @PathVariable String transactionId) {
@@ -85,6 +85,11 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
+    /**
+     * Xác định IP client gửi sang VnPay ở tham số vnp_IpAddr.
+     *
+     * <p>Nếu chạy sau Gateway/reverse proxy, ưu tiên header proxy trước khi fallback về remote address.</p>
+     */
     private String resolveClientIp(HttpServletRequest request) {
         String forwardedFor = request.getHeader("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {

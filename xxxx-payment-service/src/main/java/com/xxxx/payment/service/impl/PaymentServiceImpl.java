@@ -20,9 +20,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Implementation of PaymentService.
- * Handles payment initiation, VnPay callbacks, and status queries.
- * Ensures idempotency via idempotencyKey check before processing.
+ * Service hiện thực toàn bộ nghiệp vụ thanh toán của Payment Service.
+ *
+ * <p>Đây là class nối hệ thống nội bộ với cổng thanh toán VnPay. Người mới có thể hiểu class này theo 3 nhiệm vụ:</p>
+ *
+ * <ul>
+ *   <li>Tạo giao dịch thanh toán và sinh URL để frontend redirect người dùng sang VnPay.</li>
+ *   <li>Nhận callback/return từ VnPay, kiểm tra chữ ký để chắc chắn dữ liệu không bị giả mạo.</li>
+ *   <li>Cập nhật trạng thái transaction và phát event {@code payment.completed}/{@code payment.failed} cho order-service.</li>
+ * </ul>
+ *
+ * <p>Payment dùng {@code orderId} làm idempotency key để nếu order-service gọi lại cùng một order,
+ * hệ thống trả về giao dịch cũ thay vì tạo nhiều transaction thanh toán cho một đơn.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -36,7 +45,8 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentInitiateResponse initiatePayment(InitiatePaymentRequest request, String clientIp) {
-        // Idempotency check: use orderId as idempotency key
+        // Kiểm tra idempotency: một order chỉ nên có một giao dịch thanh toán đang dùng.
+        // Nếu order-service retry do timeout/mạng chập chờn, payment-service trả lại transaction cũ.
         String idempotencyKey = request.getOrderId();
         Optional<PaymentTransactionEntity> existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
@@ -50,7 +60,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .build();
         }
 
-        // Create new payment transaction with PENDING status
+        // Tạo giao dịch thanh toán mới ở trạng thái PENDING trước khi chuyển người dùng sang VnPay.
         String transactionId = UUID.randomUUID().toString();
         String txnRef = transactionId.substring(transactionId.length() - 12);
         PaymentTransactionEntity transaction = PaymentTransactionEntity.builder()
@@ -64,7 +74,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .idempotencyKey(idempotencyKey)
                 .build();
 
-        // Generate VnPay payment URL
+        // Tạo URL để người dùng được chuyển sang cổng thanh toán VnPay.
         String orderInfo = request.getDescription() != null
                 ? request.getDescription()
                 : "Thanh toan don hang: " + request.getOrderId();
@@ -92,18 +102,18 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public String handleVnPayCallback(VnPayCallbackRequest request) {
-        // Build params map for signature validation
+        // Gom tham số callback vào Map để kiểm tra chữ ký.
         Map<String, String> params = buildParamsMap(request);
         String receivedHash = request.getVnp_SecureHash();
 
-        // Validate signature
+        // Xác thực chữ ký trước khi cập nhật trạng thái giao dịch.
         boolean isValid = vnPayService.validateSignature(params, receivedHash);
         if (!isValid) {
             log.warn("Invalid VnPay signature for txnRef={}", request.getVnp_TxnRef());
             return "INVALID_SIGNATURE";
         }
 
-        // Find transaction by txnRef (last 12 chars of transactionId)
+        // Tìm giao dịch theo txnRef; hệ thống dùng 12 ký tự cuối của transactionId làm mã tham chiếu VnPay.
         String txnRef = request.getVnp_TxnRef();
         Optional<PaymentTransactionEntity> transactionOpt = findTransactionByTxnRef(txnRef);
         if (transactionOpt.isEmpty()) {
@@ -199,14 +209,19 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Find transaction by VnPay txnRef.
+     * Tìm giao dịch nội bộ dựa trên mã tham chiếu {@code txnRef} của VnPay.
+     *
+     * <p>{@code txnRef} là mã ngắn gửi sang VnPay. Khi VnPay callback, hệ thống dùng mã này để map ngược về transaction nội bộ.</p>
      */
     private Optional<PaymentTransactionEntity> findTransactionByTxnRef(String txnRef) {
         return paymentRepository.findByTxnRef(txnRef);
     }
 
     /**
-     * Build parameter map from VnPay callback request for signature validation.
+     * Chuyển request callback của VnPay thành Map tham số phục vụ kiểm tra chữ ký.
+     *
+     * <p>VnPay ký trên tập tham số {@code vnp_*}. Vì vậy trước khi validate, code gom các field callback
+     * vào Map theo đúng tên tham số mà VnPay quy định.</p>
      */
     private Map<String, String> buildParamsMap(VnPayCallbackRequest request) {
         Map<String, String> params = new HashMap<>();

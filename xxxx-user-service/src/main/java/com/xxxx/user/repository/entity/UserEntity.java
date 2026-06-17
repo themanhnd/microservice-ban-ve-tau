@@ -7,6 +7,11 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entity lưu tài khoản người dùng của hệ thống.
+ *
+ * <p>Đây là nguồn dữ liệu chính cho đăng nhập, phân quyền và thông tin hồ sơ cơ bản của user.</p>
+ */
 @Entity
 @Table(name = "users")
 @Getter

@@ -20,25 +20,31 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Controller công bố API tồn kho.
+ *
+ * <p>Các endpoint ở đây thường được admin hoặc service nội bộ dùng để xem tồn kho, nạp tồn ban đầu,
+ * giữ vé, hoàn vé và cấu hình bucket chống tranh chấp khi flash sale.</p>
+ */
 @RestController
 @RequestMapping("/api/inventory")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Inventory", description = "Inventory/Stock management APIs")
+@Tag(name = "Inventory", description = "API quản lý tồn kho vé")
 public class InventoryController {
 
     private final InventoryService inventoryService;
 
-    @Operation(summary = "Check stock level", description = "Get current stock level for a ticket detail")
+    @Operation(summary = "Kiểm tra tồn kho", description = "Trả số tồn hiện tại của một ticket detail")
     @GetMapping("/stock/{ticketDetailId}")
     public ApiResponse<StockLevelResponse> getStockLevel(
-            @Parameter(description = "Ticket Detail ID") @PathVariable Long ticketDetailId) {
+            @Parameter(description = "ID của chi tiết vé") @PathVariable Long ticketDetailId) {
         log.info("Checking stock level for ticketDetailId: {}", ticketDetailId);
         StockLevelResponse response = inventoryService.getStockLevel(ticketDetailId);
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Initialize stock", description = "Nạp tồn kho ban đầu khi mở bán (idempotent)")
+    @Operation(summary = "Khởi tạo tồn kho", description = "Nạp tồn kho ban đầu khi mở bán (idempotent)")
     @PostMapping("/stock/initialize")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<StockLevelResponse> initializeStock(
@@ -50,7 +56,7 @@ public class InventoryController {
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Reserve stock", description = "Reserve stock for an order")
+    @Operation(summary = "Giữ vé", description = "Giữ tồn kho cho một order")
     @PostMapping("/reserve")
     @PreAuthorize("authenticated()")
     public ApiResponse<ReserveStockResponse> reserveStock(
@@ -61,7 +67,7 @@ public class InventoryController {
         return ApiResponse.ok(response);
     }
 
-    @Operation(summary = "Release stock", description = "Release reserved stock (compensation action)")
+    @Operation(summary = "Hoàn vé", description = "Hoàn tồn kho đã giữ khi order bị hủy hoặc thanh toán thất bại")
     @PostMapping("/release")
     @PreAuthorize("authenticated()")
     public ApiResponse<String> releaseStock(
@@ -72,7 +78,7 @@ public class InventoryController {
         return ApiResponse.ok("Stock released successfully");
     }
 
-    @Operation(summary = "List bucket configs", description = "Get all inventory bucket configurations")
+    @Operation(summary = "Lấy cấu hình bucket", description = "Trả danh sách cấu hình bucket tồn kho")
     @GetMapping("/bucket-configs")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<List<InventoryBucketConfigEntity>> getAllBucketConfigs() {
@@ -81,7 +87,7 @@ public class InventoryController {
         return ApiResponse.ok(configs);
     }
 
-    @Operation(summary = "Create bucket config", description = "Create a new inventory bucket configuration")
+    @Operation(summary = "Tạo cấu hình bucket", description = "Tạo cấu hình bucket mới để chia tải tồn kho")
     @PostMapping("/bucket-configs")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<InventoryBucketConfigEntity> createBucketConfig(

@@ -6,8 +6,8 @@ import java.util.Objects;
 
 /**
  * Event published when inventory is successfully reserved for an order.
- * Producer: Inventory Service
- * Consumer: Order Service
+ * Nguồn phát: Inventory Service.
+ * Bên nhận: Order Service.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class InventoryReservedEvent extends BaseEvent {

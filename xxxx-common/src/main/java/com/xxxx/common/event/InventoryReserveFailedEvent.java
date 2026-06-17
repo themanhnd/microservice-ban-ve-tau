@@ -6,8 +6,8 @@ import java.util.Objects;
 
 /**
  * Event published when inventory reservation fails due to insufficient stock.
- * Producer: Inventory Service
- * Consumer: Order Service
+ * Nguồn phát: Inventory Service.
+ * Bên nhận: Order Service.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class InventoryReserveFailedEvent extends BaseEvent {

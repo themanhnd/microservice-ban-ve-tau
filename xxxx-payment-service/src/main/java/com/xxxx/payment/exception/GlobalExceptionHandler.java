@@ -14,8 +14,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.stream.Collectors;
 
 /**
- * Global exception handler for the Payment service.
- * Handles BaseException, MethodArgumentNotValidException, and generic Exception.
+ * Bộ xử lý exception tập trung của Payment Service.
+ * Chuyển lỗi nghiệp vụ, lỗi validate và lỗi hệ thống thành ApiResponse thống nhất cho client.
  */
 @Slf4j
 @RestControllerAdvice

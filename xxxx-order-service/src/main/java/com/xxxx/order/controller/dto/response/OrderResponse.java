@@ -11,62 +11,65 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Response DTO cho thong tin don hang day du.
+ * Response DTO chứa thông tin đầy đủ của order.
+ *
+ * <p>Dùng cho màn hình chi tiết order hoặc lịch sử mua hàng. Các field queue/payment có thể null nếu order
+ * chưa đi tới bước tương ứng.</p>
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(description = "Order detail response")
+@Schema(description = "Thông tin chi tiết order")
 public class OrderResponse {
 
-    @Schema(description = "Order ID", example = "1")
+    @Schema(description = "ID nội bộ của order", example = "1")
     private Long id;
 
-    @Schema(description = "Unique order number", example = "ORD-20250613-ABC123")
+    @Schema(description = "Mã order duy nhất dùng để tra cứu và hiển thị", example = "ORD-20250613-ABC123")
     private String orderNo;
 
-    @Schema(description = "User ID", example = "user-123")
+    @Schema(description = "ID người dùng đặt vé", example = "user-123")
     private String userId;
 
-    @Schema(description = "Ticket detail ID", example = "1")
+    @Schema(description = "ID chi tiết vé được đặt", example = "1")
     private Long ticketDetailId;
 
-    @Schema(description = "Order quantity", example = "2")
+    @Schema(description = "Số lượng vé đặt", example = "2")
     private Integer quantity;
 
-    @Schema(description = "Total amount", example = "500000.00")
+    @Schema(description = "Tổng tiền order", example = "500000.00")
     private BigDecimal totalAmount;
 
-    @Schema(description = "Order status", example = "PENDING")
+    @Schema(description = "Trạng thái nghiệp vụ của order", example = "PAYMENT_PROCESSING")
     private String status;
 
-    @Schema(description = "Saga status", example = "STARTED")
+    @Schema(description = "Trạng thái kỹ thuật của Saga", example = "PAYMENT_INITIATED")
     private String sagaStatus;
 
-    @Schema(description = "Payment transaction ID", example = "TXN-123456")
+    @Schema(description = "ID giao dịch thanh toán nếu đã khởi tạo payment", example = "TXN-123456")
     private String paymentTransactionId;
 
-    @Schema(description = "Correlation ID", example = "corr-abc-123")
+    @Schema(description = "Mã truy vết xuyên suốt các service", example = "corr-abc-123")
     private String correlationId;
 
-    @Schema(description = "Failure reason")
+    @Schema(description = "Lý do thất bại/hủy/hết hạn nếu order không hoàn tất")
     private String failureReason;
 
-    @Schema(description = "Queue token for waiting room")
+    @Schema(description = "Token hàng đợi để frontend theo dõi waiting room")
     private String queueToken;
 
-    @Schema(description = "Queue status", example = "WAITING")
+    @Schema(description = "Trạng thái trong waiting room", example = "WAITING")
     private String queueStatus;
 
-    @Schema(description = "Estimated queue position", example = "4")
+    @Schema(description = "Vị trí ước lượng trong hàng đợi", example = "4")
     private Integer queuePosition;
 
-    @Schema(description = "Created time")
+    @Schema(description = "Thời điểm tạo order")
     private LocalDateTime createdAt;
 
-    @Schema(description = "Last updated time")
+    @Schema(description = "Thời điểm cập nhật order gần nhất")
     private LocalDateTime updatedAt;
 }
 

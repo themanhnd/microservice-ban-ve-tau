@@ -7,8 +7,8 @@ import java.util.Objects;
 
 /**
  * Event published when payment processing fails.
- * Producer: Payment Service
- * Consumer: Order Service
+ * Nguồn phát: Payment Service.
+ * Bên nhận: Order Service.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class PaymentFailedEvent extends BaseEvent {

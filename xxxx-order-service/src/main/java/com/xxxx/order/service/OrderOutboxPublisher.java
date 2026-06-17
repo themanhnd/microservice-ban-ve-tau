@@ -16,7 +16,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Worker publish outbox event sang Kafka, có retry/backoff để không mất event khi Kafka lỗi tạm thời.
+ * Worker publish event từ bảng outbox của Order Service ra Kafka.
+ *
+ * <p>Luồng chuẩn là: service nghiệp vụ ghi event vào DB trong cùng transaction với order, sau đó worker này đọc các
+ * record PENDING/RETRY và publish Kafka. Nhờ vậy tránh mất event khi DB commit xong nhưng Kafka tạm lỗi.</p>
  */
 @Service
 @RequiredArgsConstructor

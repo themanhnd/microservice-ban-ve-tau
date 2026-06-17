@@ -7,8 +7,8 @@ import java.util.Objects;
 
 /**
  * Event published when a new order is placed.
- * Producer: Order Service
- * Consumer: Inventory Service
+ * Nguồn phát: Order Service.
+ * Bên nhận: Inventory Service giữ vé/tồn kho sau khi đơn được tạo.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class OrderPlacedEvent extends BaseEvent {

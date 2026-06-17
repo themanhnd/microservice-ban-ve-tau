@@ -6,8 +6,8 @@ import java.util.Objects;
 
 /**
  * Sự kiện được phát khi đơn hàng bị hủy (do lỗi thanh toán hoặc nguyên nhân khác).
- * Producer: Order Service
- * Consumer: Inventory Service (để hoàn lại tồn kho đã giữ), Booking Service (để hủy booking)
+ * Nguồn phát: Order Service.
+ * Bên nhận: Inventory Service hoàn lại tồn kho đã giữ, Booking Service hủy booking liên quan.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class OrderCancelledEvent extends BaseEvent {

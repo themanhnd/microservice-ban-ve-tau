@@ -6,7 +6,7 @@ package com.xxxx.common.constant;
 public final class KafkaTopics {
 
     private KafkaTopics() {
-        // Constants class - prevent instantiation
+        // Lớp chỉ chứa hằng số, không cho phép khởi tạo object.
     }
 
     // Order domain events

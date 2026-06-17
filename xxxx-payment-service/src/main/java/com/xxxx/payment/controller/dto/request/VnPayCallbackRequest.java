@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Request DTO for VnPay IPN callback.
+ * DTO request nhận dữ liệu IPN callback do VnPay gửi về server.
  * Contains all parameters returned by VnPay gateway.
  */
 @Data

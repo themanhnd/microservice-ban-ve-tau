@@ -20,16 +20,22 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @Slf4j
+/**
+ * Controller quản lý booking.
+ *
+ * <p>Trong luồng chính, booking thường được tạo/xác nhận từ event {@code order.confirmed}; các API ở đây phục vụ
+ * tra cứu, cập nhật hoặc hủy booking khi cần.</p>
+ */
 @RestController
 @RequestMapping("/api/booking")
 @RequiredArgsConstructor
-@Tag(name = "Booking", description = "Booking management APIs")
+@Tag(name = "Booking", description = "API quản lý booking")
 public class BookingController {
 
     private final BookingService bookingService;
 
     @PostMapping
-    @Operation(summary = "Create a new booking")
+    @Operation(summary = "Tạo booking", description = "Tạo booking thủ công ở trạng thái ban đầu")
     @PreAuthorize("authenticated()")
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Valid @RequestBody CreateBookingRequest request,
@@ -42,7 +48,7 @@ public class BookingController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get booking by ID")
+    @Operation(summary = "Lấy booking theo ID", description = "Trả thông tin booking theo ID")
     @PreAuthorize("@bookingAuthorization.canAccessBooking(#id, authentication)")
     public ResponseEntity<ApiResponse<BookingResponse>> getBookingById(@PathVariable Long id) {
         log.info("Getting booking by id={}", id);
@@ -51,7 +57,7 @@ public class BookingController {
     }
 
     @GetMapping("/user/{userId}")
-    @Operation(summary = "Get bookings by user ID")
+    @Operation(summary = "Lấy booking theo user", description = "Trả danh sách booking của một người dùng")
     @PreAuthorize("@bookingAuthorization.canAccessUserBookings(#userId, authentication)")
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getBookingsByUserId(@PathVariable Long userId) {
         log.info("Getting bookings for userId={}", userId);
@@ -60,7 +66,7 @@ public class BookingController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a booking")
+    @Operation(summary = "Cập nhật booking", description = "Cập nhật thông tin booking còn hiệu lực")
     @PreAuthorize("@bookingAuthorization.canAccessBooking(#id, authentication)")
     public ResponseEntity<ApiResponse<BookingResponse>> updateBooking(
             @PathVariable Long id,
@@ -71,7 +77,7 @@ public class BookingController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Cancel a booking")
+    @Operation(summary = "Hủy booking", description = "Chuyển booking sang trạng thái hủy")
     @PreAuthorize("@bookingAuthorization.canAccessBooking(#id, authentication)")
     public ResponseEntity<ApiResponse<BookingResponse>> cancelBooking(@PathVariable Long id) {
         log.info("Cancelling booking id={}", id);

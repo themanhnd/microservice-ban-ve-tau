@@ -10,8 +10,8 @@ import java.util.List;
 public interface TicketRepository extends JpaRepository<TicketEntity, Long> {
 
     /**
-     * Find all tickets where status is not the given value.
-     * Used to exclude soft-deleted tickets (status = 2).
+     * Tìm tất cả ticket có trạng thái khác giá trị truyền vào.
+     * Thường dùng để loại bỏ ticket đã xóa mềm, ví dụ status = 2.
      */
     List<TicketEntity> findAllByStatusNot(Integer status);
 }

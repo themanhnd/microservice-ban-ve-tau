@@ -15,8 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka configuration for Booking Service.
- * Configures consumer factory for OrderConfirmedEvent.
+ * Cấu hình Kafka cho Booking Service.
+ * Khai báo consumer factory để nhận các sự kiện xác nhận/hủy đơn từ Order Service.
  */
 @Configuration
 public class KafkaConfig {
@@ -24,7 +24,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    // ==================== Consumer Configuration ====================
+    // ==================== Cấu hình Consumer ====================
 
     @Bean
     public ConsumerFactory<String, OrderConfirmedEvent> orderConfirmedConsumerFactory() {

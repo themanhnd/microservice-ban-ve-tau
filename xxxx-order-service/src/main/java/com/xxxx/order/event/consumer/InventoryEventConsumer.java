@@ -11,8 +11,14 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Kafka consumer cho các events từ Inventory Service.
- * Xử lý InventoryReserved và InventoryReserveFailed trong saga flow.
+ * Kafka consumer nhận kết quả giữ tồn kho từ inventory-service.
+ *
+ * <p>Consumer này là "tai nghe" của order-service trong bước inventory của Saga:</p>
+ *
+ * <ul>
+ *   <li>Nếu nhận {@code inventory.reserved} thì order tiếp tục sang bước tạo thanh toán.</li>
+ *   <li>Nếu nhận {@code inventory.reserve-failed} thì order bị hủy sớm vì không đủ vé.</li>
+ * </ul>
  */
 @Component
 @RequiredArgsConstructor
@@ -22,8 +28,10 @@ public class InventoryEventConsumer {
     private final OrderServiceImpl orderServiceImpl;
 
     /**
-     * Handle InventoryReserved event - inventory đã được giữ thành công cho đơn hàng.
-     * Tiếp tục saga flow: cập nhật trạng thái đơn hàng.
+     * Xử lý {@code InventoryReservedEvent} khi inventory đã giữ vé thành công cho đơn hàng.
+     *
+     * <p>Sau khi nhận event này, order-service không dừng ở việc cập nhật trạng thái, mà còn chuẩn bị bước
+     * khởi tạo thanh toán cho người dùng.</p>
      */
     @KafkaListener(
             topics = KafkaTopics.INVENTORY_RESERVED,
@@ -45,8 +53,9 @@ public class InventoryEventConsumer {
     }
 
     /**
-     * Handle InventoryReserveFailed event - không đủ tồn kho để giữ cho đơn hàng.
-     * Hủy đơn hàng với lý do thất bại.
+     * Xử lý {@code InventoryReserveFailedEvent} khi không đủ tồn kho hoặc giữ vé thất bại.
+     *
+     * <p>Đây là nhánh fail sớm của Saga: order bị hủy trước khi chạm sang bước thanh toán.</p>
      */
     @KafkaListener(
             topics = KafkaTopics.INVENTORY_RESERVE_FAILED,

@@ -7,6 +7,11 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Entity lưu thông tin sự kiện/chuyến tàu được mở bán trong hệ thống.
+ *
+ * <p>Event là lớp dữ liệu nghiệp vụ nền cho ticket-service: một event có thể sinh ra nhiều ticket để bán.</p>
+ */
 @Entity
 @Table(name = "events")
 @Getter

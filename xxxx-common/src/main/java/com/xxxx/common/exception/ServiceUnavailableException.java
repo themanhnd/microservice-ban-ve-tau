@@ -17,7 +17,7 @@ public class ServiceUnavailableException extends BaseException {
     }
 
     /**
-     * Create exception indicating a specific service is unavailable.
+     * Tạo exception cho biết một service cụ thể đang không khả dụng.
      *
      * @param serviceName the name of the unavailable service
      * @param cause the underlying cause

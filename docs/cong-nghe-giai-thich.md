@@ -918,71 +918,84 @@ Cách này an toàn hơn vì nếu ai đó gọi thẳng vào service nội bộ
 
 ---
 
-## C?p nh?t 2026-06-08: v?n h�nh v� flash sale
+## Cập nhật 2026-06-08: vận hành và flash sale
 
 ### Docker Compose profiles
 
-`docker-compose.yml` hi?n du?c t�ch th�nh 4 profile d? ch?y linh ho?t hon:
+`docker-compose.yml` hiện được tách thành 4 profile để chạy linh hoạt hơn:
 
 - `infra`: MySQL, Redis, Zookeeper, Kafka.
-- `platform`: discovery, config, gateway.
-- `business`: c�c service nghi?p v?.
-- `observability`: Prometheus, Grafana, ELK, Zipkin.
+- `platform`: Discovery, Config Server, Gateway.
+- `business`: các service nghiệp vụ.
+- `observability`: Prometheus, Grafana, Elasticsearch, Logstash, Kibana, Zipkin.
 
-Nh? v?y m�y dev c� th? ch? b?t `infra`, ho?c `infra + platform`; c�n khi c?n ch?y g?n production th� b?t
-`infra + platform + business`. Observability l� nh�m t�y ch?n, m? khi c?n quan s�t s�u.
+Cách tách này giúp máy dev có thể chỉ bật `infra`, hoặc `infra + platform`; khi cần chạy gần
+production thì bật `infra + platform + business`. Observability là nhóm tùy chọn, chỉ bật khi
+cần quan sát sâu metrics/log/tracing.
+
+> Lưu ý theo compose hiện tại: chỉ Gateway publish `8080` ra host. MySQL, Redis, Kafka,
+> Discovery, Config Server và business service nằm trong Docker network `xxxx-network`. Nếu chạy
+> service bằng Maven trên host, cần expose thêm các port dev mà `environment/config-repo` đang dùng
+> (`3316`, `6319`, `9094`) hoặc chỉnh lại cấu hình local.
 
 ### Bucket sharding cho inventory hot
 
-? du?ng gi? v�, `inventory-service` hi?n h? tr? chia t?n kho theo bucket khi c� `InventoryBucketConfigEntity`
- m?c d?nh:
+Ở đường giữ vé, `inventory-service` có `InventoryBucketConfigEntity` để mô tả cách chia tồn kho
+thành nhiều bucket khi một ticket detail trở thành điểm nóng trong flash sale:
 
-- key t?n kho: `stock:available:{ticketDetailId}:{bucketIndex}`
-- key kh�a: `lock:inventory:{ticketDetailId}:{bucketIndex}`
-- ch?n bucket: hash theo `orderId`
-- back-source: chuy?n b?t t?n t? bucket kh�c khi bucket hi?n t?i xu?ng g?n ngu?ng `thresholdValue`
+- key tồn kho: `stock:available:{ticketDetailId}:{bucketIndex}`
+- key khóa: `lock:inventory:{ticketDetailId}:{bucketIndex}`
+- chọn bucket: hash theo `orderId`
+- back-source: chuyển bớt tồn từ bucket khác khi bucket hiện tại xuống gần `thresholdValue`
 
-� tu?ng l� bi?n 1 di?m n�ng th�nh nhi?u di?m nh? hon d? tang th�ng lu?ng khi flash sale.
+Ý tưởng là biến một điểm nóng thành nhiều điểm nhỏ hơn để tăng thông lượng khi nhiều request cùng
+tranh chấp một loại vé.
 
-### Reconciliation job Redis ? MySQL
+### Reconciliation job Redis và MySQL
 
-`InventoryReconciliationJob` ch?y d?nh k? d? t�nh l?i t?n kho t? DB v� ghi l?i v�o Redis. M?c ti�u l� ch?ng l?ch
-khi Redis restart, key b? x�a ho?c service ch?t gi?a ch?ng.
+`InventoryReconciliationJob` chạy định kỳ để tính lại tồn kho từ DB và ghi lại vào Redis. Mục tiêu
+là chống lệch dữ liệu khi Redis restart, key bị xóa hoặc service chết giữa chừng.
 
-### Null-safety ? gateway
+### Null-safety ở gateway
 
-C�c package `filter` v� `exception` c?a gateway d� khai b�o `@NonNullApi` d? kh?p null-safety contract c?a
-Spring WebFlux. Vi?c n�y kh�ng d?i h�nh vi runtime, nhung gi�p IDE/compiler b?t warning ? c�c method override.
+Các package `filter` và `exception` của gateway khai báo `@NonNullApi` để khớp null-safety contract
+của Spring WebFlux. Việc này không đổi hành vi runtime, nhưng giúp IDE/compiler bắt warning ở các
+method override tốt hơn.
 
 ### Waiting room cho flash sale
 
-Waiting room la lop dem cong bang dat truoc luong request vao Saga. Thay vi ai bam nhanh hon thi chen thang
-vao luong dat ve, he thong phat `queueToken` va xep hang truoc. Co 3 loi ich:
+Waiting room là lớp đệm công bằng đặt trước luồng request vào Saga. Thay vì ai bấm nhanh hơn thì
+chen thẳng vào luồng đặt vé, hệ thống phát `queueToken` và xếp hàng trước. Có 3 lợi ích:
 
-- Bao ve service nghiep vu khi tai dot bien.
-- Giu so don `PROCESSING` dong thoi trong nguong he thong chiu duoc.
-- Cong bang hon vi worker lay theo `priority` roi den thu tu vao hang.
+- Bảo vệ service nghiệp vụ khi tải đột biến.
+- Giữ số đơn `PROCESSING` đồng thời trong ngưỡng hệ thống chịu được.
+- Công bằng hơn vì worker lấy theo `priority` rồi đến thứ tự vào hàng.
 
-Trong order-service hien tai:
+Trong `order-service` hiện tại:
 
-- `placeOrder()` tao order trang thai `QUEUED` + queue item `WAITING`.
-- Worker dinh ky chuyen tung lo item tu `WAITING` sang `PROCESSING`.
-- Luc do moi publish `OrderPlacedEvent` de bat dau Saga reserve inventory -> payment -> booking.
-- Token het han thi queue item chuyen `EXPIRED`.
+- `placeOrder()` tạo order và queue item để kiểm soát tốc độ đưa vào Saga.
+- Worker định kỳ chuyển từng lô item sang xử lý.
+- Khi đến lượt mới publish `OrderPlacedEvent` để bắt đầu Saga `inventory -> payment -> booking`.
+- Token hết hạn thì queue item chuyển `EXPIRED` và order có failure reason rõ ràng.
 
-Mo hinh nay giong khu xep hang truoc cua concert: ban khong duoc lao thang vao cua quet ve; ban lay so,
-cho den luot, roi moi duoc dua vao khu xu ly tiep theo.
+Mô hình này giống khu xếp hàng trước của concert: người mua lấy số, chờ đến lượt, rồi mới được đưa
+vào khu xử lý tiếp theo.
 
-### Auth hardening bo sung
+### Auth hardening bổ sung
 
-Ngoai viec cap JWT/refresh token, `user-service` hien co them 3 lop phong thu co ban:
+Ngoài việc cấp JWT/refresh token, `user-service` hiện có thêm các lớp phòng thủ cơ bản:
 
-- **Bootstrap admin** bang bien moi truong: giup moi truong moi co tai khoan quan tri ban dau ma khong can sua DB tay.
-- **Rate limit login/refresh**: giam nguy co brute-force password va spam refresh token.
-- **Test vong doi auth**: khoa lai luong `login -> refresh -> logout` de cac lan sua sau khong lam vo flow xac thuc.
+- **Bootstrap admin** bằng biến môi trường: giúp môi trường mới có tài khoản quản trị ban đầu mà không cần sửa DB tay.
+- **Rate limit login/refresh**: giảm nguy cơ brute-force password và spam refresh token.
+- **Test vòng đời auth**: khóa lại luồng `login -> refresh -> logout` để các lần sửa sau không làm vỡ flow xác thực.
 
 ### Auth hardening B5: Gateway authenticate, Service authorize
 
-Sau B5, gateway khong con la noi duy nhat quyet dinh quyen chi tiet. Gateway validate JWT cho endpoint private, strip identity header gia mao va forward `Authorization` xuong service. Moi service quan trong co `JwtSecurityConfig`, `JwtAuthenticationFilter`, principal noi bo va `@PreAuthorize` de tu kiem tra rule `ADMIN` hoac owner.
+Gateway không còn là nơi duy nhất quyết định quyền chi tiết. Gateway validate JWT cho endpoint
+private, strip identity header giả mạo và forward `Authorization` xuống service. Các service quan
+trọng có `JwtSecurityConfig`, `JwtAuthenticationFilter`, principal nội bộ và `@PreAuthorize` để tự
+kiểm tra rule `ADMIN` hoặc owner.
 
-Cac endpoint quan tri nhu employee, create/update/delete event-ticket-inventory can `ADMIN`. Cac endpoint order, booking, payment dung owner check de user chi doc/thao tac tai nguyen cua minh; `ADMIN` co quyen xem tong quat.
+Các endpoint quản trị như employee, create/update/delete event-ticket-inventory cần `ADMIN`. Các
+endpoint order, booking, payment dùng owner check để user chỉ đọc/thao tác tài nguyên của mình;
+`ADMIN` có quyền xem tổng quát.

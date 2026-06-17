@@ -12,14 +12,16 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 /**
- * Request DTO cho việc đặt hàng mới.
- * Giữ nguyên pattern PlaceOrderMQRequest từ monolith, mở rộng thêm userId và totalAmount.
+ * Request DTO cho API đặt vé.
+ *
+ * <p>Frontend gửi DTO này tới {@code POST /api/orders/place}. Sau khi nhận request, order-service tạo order,
+ * đưa vào waiting room rồi bắt đầu Saga giữ vé/thanh toán khi đến lượt.</p>
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Place order request - starts a new order Saga")
+@Schema(description = "Request đặt vé, dùng để bắt đầu luồng Saga order -> inventory -> payment -> booking")
 public class PlaceOrderRequest {
 
     @NotBlank(message = "userId is required")

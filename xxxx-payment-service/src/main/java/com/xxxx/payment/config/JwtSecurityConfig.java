@@ -15,6 +15,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import java.util.List;
 
+/**
+ * Cấu hình bảo mật JWT cho Payment Service.
+ *
+ * <p>Hai endpoint {@code /api/payment/vnpay-callback} và {@code /api/payment/vnpay-return} được mở public vì VnPay
+ * hoặc trình duyệt người dùng phải gọi vào mà không có JWT của hệ thống.</p>
+ */
 @Configuration
 @EnableMethodSecurity
 public class JwtSecurityConfig {

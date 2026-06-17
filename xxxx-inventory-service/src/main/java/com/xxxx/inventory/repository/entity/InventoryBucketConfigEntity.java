@@ -98,7 +98,7 @@ public class InventoryBucketConfigEntity {
 
     /**
      * Phiên bản cho cơ chế khóa lạc quan (Optimistic Locking).
-     * Critical cho concurrency control khi nhiều request cùng cập nhật bucket config.
+     * Rất quan trọng cho kiểm soát đồng thời khi nhiều request cùng cập nhật cấu hình bucket.
      */
     @Version
     @Column(name = "version_id")

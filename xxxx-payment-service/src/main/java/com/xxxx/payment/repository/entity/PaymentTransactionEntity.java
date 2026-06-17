@@ -52,7 +52,9 @@ public class PaymentTransactionEntity {
     private String paymentMethod = "VNPAY";
 
     /**
-     * Payment status: PENDING, PROCESSING, COMPLETED, FAILED, REFUNDED
+     * Trạng thái thanh toán: PENDING, PROCESSING, COMPLETED, FAILED, REFUNDED.
+     *
+     * <p>Order-service dựa vào event phát ra từ trạng thái này để xác nhận hoặc hủy order.</p>
      */
     @Column(nullable = false, length = 20)
     @Builder.Default

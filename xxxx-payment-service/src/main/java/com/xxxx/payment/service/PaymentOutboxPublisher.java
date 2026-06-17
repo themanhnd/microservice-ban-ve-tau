@@ -14,7 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** Worker publish outbox event của payment-service sang Kafka, có retry/backoff. */
+/**
+ * Worker publish event từ bảng outbox của Payment Service ra Kafka.
+ *
+ * <p>Sau khi cập nhật transaction thanh toán trong DB, payment-service ghi event vào outbox. Worker này chịu trách nhiệm
+ * phát các event {@code payment.completed}/{@code payment.failed} ra Kafka và retry nếu publish lỗi.</p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -31,21 +36,45 @@ public class PaymentOutboxPublisher {
     @Transactional
     public int publishDueEvents() {
         List<PaymentEventOutboxEntity> events = outboxRepository.findByStatusInAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(List.of(STATUS_PENDING, STATUS_RETRY), LocalDateTime.now(), PageRequest.of(0, batchSize));
-        int published = 0; for (PaymentEventOutboxEntity event : events) { if (publishOne(event)) published++; } return published;
+        int published = 0;
+        for (PaymentEventOutboxEntity event : events) {
+            if (publishOne(event)) {
+                published++;
+            }
+        }
+        return published;
     }
 
     private boolean publishOne(PaymentEventOutboxEntity outboxEvent) {
         try {
             Object event = objectMapper.readValue(outboxEvent.getPayload(), Class.forName(outboxEvent.getEventType()));
             kafkaTemplate.send(outboxEvent.getTopic(), outboxEvent.getEventKey(), event).get();
-            outboxEvent.setStatus(STATUS_PUBLISHED); outboxEvent.setPublishedAt(LocalDateTime.now()); outboxEvent.setLastError(null); outboxRepository.save(outboxEvent); return true;
+            outboxEvent.setStatus(STATUS_PUBLISHED);
+            outboxEvent.setPublishedAt(LocalDateTime.now());
+            outboxEvent.setLastError(null);
+            outboxRepository.save(outboxEvent);
+            return true;
         } catch (Exception e) {
             int attempts = outboxEvent.getAttemptCount() == null ? 1 : outboxEvent.getAttemptCount() + 1;
-            outboxEvent.setAttemptCount(attempts); outboxEvent.setLastError(truncate(e.getMessage()));
-            if (attempts >= maxAttempts) { outboxEvent.setStatus(STATUS_FAILED); } else { outboxEvent.setStatus(STATUS_RETRY); outboxEvent.setNextAttemptAt(LocalDateTime.now().plusSeconds(retryDelaySeconds)); }
-            outboxRepository.save(outboxEvent); log.warn("Failed to publish payment outbox event: id={}, attempts={}, status={}, error={}", outboxEvent.getId(), attempts, outboxEvent.getStatus(), e.getMessage()); return false;
+            outboxEvent.setAttemptCount(attempts);
+            outboxEvent.setLastError(truncate(e.getMessage()));
+            if (attempts >= maxAttempts) {
+                outboxEvent.setStatus(STATUS_FAILED);
+            } else {
+                outboxEvent.setStatus(STATUS_RETRY);
+                outboxEvent.setNextAttemptAt(LocalDateTime.now().plusSeconds(retryDelaySeconds));
+            }
+            outboxRepository.save(outboxEvent);
+            log.warn("Failed to publish payment outbox event: id={}, attempts={}, status={}, error={}",
+                    outboxEvent.getId(), attempts, outboxEvent.getStatus(), e.getMessage());
+            return false;
         }
     }
 
-    private String truncate(String message) { if (message == null) return null; return message.length() <= 1024 ? message : message.substring(0, 1024); }
+    private String truncate(String message) {
+        if (message == null) {
+            return null;
+        }
+        return message.length() <= 1024 ? message : message.substring(0, 1024);
+    }
 }

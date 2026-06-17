@@ -7,7 +7,7 @@ import com.xxxx.ticket.controller.dto.response.TicketResponse;
 import java.util.List;
 
 /**
- * Service interface for Ticket operations.
+ * Service interface định nghĩa các thao tác nghiệp vụ với vé/ticket.
  */
 public interface TicketService {
 

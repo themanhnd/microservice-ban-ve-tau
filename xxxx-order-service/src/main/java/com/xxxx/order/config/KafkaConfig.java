@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka configuration cho Order Service.
+ * Cấu hình Kafka cho Order Service, gồm producer phát sự kiện saga và consumer nhận kết quả từ service khác.
  * Cấu hình Producer (JsonSerializer) và Consumer factories cho:
  * - InventoryReservedEvent
  * - InventoryReserveFailedEvent
@@ -33,7 +33,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    // ==================== Producer Configuration ====================
+    // ==================== Cấu hình Producer ====================
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
@@ -52,7 +52,7 @@ public class KafkaConfig {
         return new KafkaTemplate<>(producerFactory());
     }
 
-    // ==================== Consumer Configuration ====================
+    // ==================== Cấu hình Consumer ====================
 
     @Bean
     public ConsumerFactory<String, InventoryReservedEvent> inventoryReservedConsumerFactory() {

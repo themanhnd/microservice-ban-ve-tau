@@ -16,8 +16,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Redis cache configuration for Booking Service.
- * Cache "bookings" with TTL of 10 minutes.
+ * Cấu hình Redis cache cho Booking Service.
+ * Cache `bookings` lưu dữ liệu đọc trong 10 phút để giảm truy vấn database.
  */
 @Configuration
 @EnableCaching

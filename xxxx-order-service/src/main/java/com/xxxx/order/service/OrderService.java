@@ -6,7 +6,7 @@ import com.xxxx.order.controller.dto.response.OrderResponse;
 import com.xxxx.order.controller.dto.response.OrderStatusResponse;
 
 /**
- * Order Service interface.
+ * Service interface định nghĩa các nghiệp vụ chính của Order Service.
  * Quản lý vòng đời đơn hàng bao gồm Saga orchestration.
  */
 public interface OrderService {

@@ -16,34 +16,40 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Controller quản lý chi tiết vé.
+ *
+ * <p>Ticket detail là đơn vị được inventory-service giữ tồn kho theo {@code ticketDetailId}; vì vậy đây là dữ liệu
+ * quan trọng nối ticket-service với inventory/order.</p>
+ */
 @RestController
 @RequestMapping("/api/ticket-details")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Ticket Detail", description = "Ticket Detail management APIs")
+@Tag(name = "Ticket Detail", description = "API quản lý chi tiết vé")
 public class TicketDetailController {
 
     private final TicketDetailService ticketDetailService;
 
-    @Operation(summary = "Get ticket details by ticket ID", description = "Retrieve all ticket details for a specific ticket")
+    @Operation(summary = "Lấy chi tiết vé theo ticket ID", description = "Trả tất cả chi tiết vé thuộc một ticket")
     @GetMapping("/ticket/{ticketId}")
     public ApiResponse<List<TicketDetailResponse>> getDetailsByTicketId(
-            @Parameter(description = "Ticket ID") @PathVariable Long ticketId) {
+            @Parameter(description = "ID của ticket") @PathVariable Long ticketId) {
         log.info("Fetching ticket details for ticket id: {}", ticketId);
         List<TicketDetailResponse> details = ticketDetailService.getDetailsByTicketId(ticketId);
         return ApiResponse.ok(details);
     }
 
-    @Operation(summary = "Get ticket detail by ID", description = "Retrieve a specific ticket detail by its ID")
+    @Operation(summary = "Lấy chi tiết vé theo ID", description = "Trả thông tin chi tiết vé theo ID")
     @GetMapping("/{id}")
     public ApiResponse<TicketDetailResponse> getDetailById(
-            @Parameter(description = "Ticket Detail ID") @PathVariable Long id) {
+            @Parameter(description = "ID của chi tiết vé") @PathVariable Long id) {
         log.info("Fetching ticket detail with id: {}", id);
         TicketDetailResponse detail = ticketDetailService.getDetailById(id);
         return ApiResponse.ok(detail);
     }
 
-    @Operation(summary = "Create a new ticket detail", description = "Create a new ticket detail with the provided information")
+    @Operation(summary = "Tạo chi tiết vé", description = "Tạo chi tiết vé mới từ dữ liệu request")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<TicketDetailResponse> createDetail(
@@ -53,22 +59,22 @@ public class TicketDetailController {
         return ApiResponse.ok(detail);
     }
 
-    @Operation(summary = "Update a ticket detail", description = "Update an existing ticket detail by its ID")
+    @Operation(summary = "Cập nhật chi tiết vé", description = "Cập nhật chi tiết vé theo ID")
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<TicketDetailResponse> updateDetail(
-            @Parameter(description = "Ticket Detail ID") @PathVariable Long id,
+            @Parameter(description = "ID của chi tiết vé") @PathVariable Long id,
             @Valid @RequestBody UpdateTicketDetailRequest request) {
         log.info("Updating ticket detail with id: {}", id);
         TicketDetailResponse detail = ticketDetailService.updateDetail(id, request);
         return ApiResponse.ok(detail);
     }
 
-    @Operation(summary = "Delete a ticket detail", description = "Soft delete a ticket detail by its ID")
+    @Operation(summary = "Xóa mềm chi tiết vé", description = "Đánh dấu chi tiết vé đã xóa mềm theo ID")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<String> deleteDetail(
-            @Parameter(description = "Ticket Detail ID") @PathVariable Long id) {
+            @Parameter(description = "ID của chi tiết vé") @PathVariable Long id) {
         log.info("Deleting ticket detail with id: {}", id);
         ticketDetailService.deleteDetail(id);
         return ApiResponse.ok("Ticket detail deleted successfully");

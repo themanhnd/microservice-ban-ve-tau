@@ -3,13 +3,13 @@ package com.xxxx.payment.config;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Resilience4j configuration placeholder for Payment Service.
+ * Điểm mở rộng cấu hình Resilience4j cho Payment Service khi cần bổ sung bằng code.
  *
  * Circuit breaker, retry, bulkhead, and timeout configurations
- * are managed via the centralized Config Server (application.yml in config-repo).
+ * được quản lý tập trung qua Config Server trong config-repo.
  *
- * This class exists as an extension point for any programmatic resilience
- * customization that cannot be expressed through YAML configuration.
+ * Class này dùng làm điểm mở rộng khi cần cấu hình resilience bằng code
+ * mà YAML chưa mô tả được hoặc cần logic khởi tạo đặc biệt.
  *
  * Key resilience patterns for Payment Service:
  * - Timeout for VnPay gateway calls
@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class ResilienceConfig {
-    // Resilience4j is configured via Spring Cloud Config Server.
+    // Resilience4j hiện được cấu hình qua Spring Cloud Config Server.
     // See config-repo/xxxx-payment-service.yml for circuit breaker,
     // retry, timeout, and bulkhead settings for VnPay calls.
 }

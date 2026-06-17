@@ -10,8 +10,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * JPA entity representing a Booking.
- * Migrated from DDD domain entity com.xxxx.ddd.domain.model.entity.Booking.
+ * Entity JPA biểu diễn một booking được lưu trong database.
+ * Lớp này thay thế model DDD cũ và hiện là nguồn dữ liệu chính cho bảng booking.
  */
 @Data
 @Accessors(chain = true)

@@ -11,8 +11,8 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 /**
- * Request DTO for initiating a payment.
- * Called by Order Service via Feign client.
+ * DTO request dùng để khởi tạo giao dịch thanh toán.
+ * Được Order Service gọi qua Feign client khi cần khởi tạo thanh toán.
  */
 @Data
 @Builder

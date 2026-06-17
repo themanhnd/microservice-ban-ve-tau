@@ -24,6 +24,20 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+/**
+ * Service quản lý booking sau khi order đã đi qua các bước inventory và payment.
+ *
+ * <p>Booking là kết quả cuối cùng mà người dùng quan tâm: một chỗ/vé đã được xác nhận. Trong Saga hiện tại,
+ * booking-service chủ yếu phản ứng với event từ order-service:</p>
+ *
+ * <ul>
+ *   <li>{@code order.confirmed}: tạo mới hoặc xác nhận booking theo {@code orderNo}.</li>
+ *   <li>{@code order.cancelled}: hủy booking liên quan nếu order bị hủy.</li>
+ * </ul>
+ *
+ * <p>Consumer phải idempotent vì Kafka có thể gửi lặp event. Vì vậy các thao tác theo {@code orderNo}
+ * ưu tiên cập nhật booking cũ thay vì tạo trùng.</p>
+ */
 public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
@@ -31,6 +45,9 @@ public class BookingServiceImpl implements BookingService {
 
     /**
      * Tạo booking thủ công ở trạng thái PENDING sau khi kiểm tra thông tin vé.
+     *
+     * <p>Luồng chính của hệ thống thường tạo booking từ event {@code order.confirmed}. Method này phục vụ API
+     * tạo trực tiếp, nên cần kiểm tra ticket tồn tại trước khi lưu.</p>
      */
     @Override
     @Transactional
@@ -147,7 +164,10 @@ public class BookingServiceImpl implements BookingService {
 
 
     /**
-     * Xử lý order.confirmed: cập nhật booking cũ hoặc tạo booking CONFIRMED nếu chưa có.
+     * Xử lý event {@code order.confirmed}: cập nhật booking cũ hoặc tạo booking CONFIRMED nếu chưa có.
+     *
+     * <p>Đây là idempotent upsert theo {@code orderNo}. Nếu Kafka gửi lặp event, booking-service không tạo thêm
+     * booking mới mà chỉ đảm bảo booking hiện có ở trạng thái đúng.</p>
      */
     @Override
     @Transactional
@@ -179,7 +199,9 @@ public class BookingServiceImpl implements BookingService {
     }
 
     /**
-     * Hủy booking theo orderNo khi nhận order.cancelled từ Kafka.
+     * Hủy booking theo {@code orderNo} khi nhận event {@code order.cancelled} từ Kafka.
+     *
+     * <p>Booking có thể chưa được tạo tại thời điểm order bị hủy; vì vậy method xử lý an toàn cả trường hợp không tìm thấy booking.</p>
      */
     @Override
     @Transactional
@@ -193,7 +215,10 @@ public class BookingServiceImpl implements BookingService {
         });
     }
     /**
-     * Kiểm tra vé tồn tại qua ticket-service; lỗi tạm thời chỉ cảnh báo để không chặn booking.
+     * Kiểm tra vé tồn tại qua ticket-service.
+     *
+     * <p>Nếu ticket-service lỗi tạm thời, method chỉ log cảnh báo để không làm hỏng luồng booking. Trong hệ thống thực tế,
+     * tùy yêu cầu nghiệp vụ có thể siết chặt hơn bằng cách fail request khi không xác thực được ticket.</p>
      */
     private void validateTicketExists(Long ticketId) {
         try {

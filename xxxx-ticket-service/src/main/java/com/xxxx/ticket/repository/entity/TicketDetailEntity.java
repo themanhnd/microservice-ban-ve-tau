@@ -11,6 +11,11 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Entity biểu diễn một biến thể vé cụ thể có thể đem bán và giữ tồn kho.
+ *
+ * <p>Inventory service làm việc trực tiếp theo {@code ticketDetailId}, nên đây là đơn vị gắn với giá và tồn kho thực tế.</p>
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -29,12 +34,15 @@ public class TicketDetailEntity {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /** Tổng tồn kho ban đầu được mở bán cho loại vé này. */
     @Column(name = "stock_initial", nullable = false)
     private Integer stockInitial;
 
+    /** Tồn khả dụng hiện đang lưu trên bảng ticket; hệ thống còn có Redis để tăng tốc đọc/ghi. */
     @Column(name = "stock_available", nullable = false)
     private Integer stockAvailable;
 
+    /** Đánh dấu đã nạp tồn kho sang inventory/Redis hay chưa. */
     @Column(name = "is_stock_prepared", nullable = false)
     private Boolean isStockPrepared;
 
@@ -50,8 +58,9 @@ public class TicketDetailEntity {
     @Column(name = "sale_end_time")
     private LocalDateTime saleEndTime;
 
+    /** Trạng thái chi tiết vé: 0=INACTIVE, 1=ACTIVE, 2=DELETED. */
     @Column(name = "status", nullable = false)
-    private Integer status; // 0=INACTIVE, 1=ACTIVE, 2=DELETED
+    private Integer status;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "activity_id", referencedColumnName = "id")

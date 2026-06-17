@@ -19,7 +19,7 @@ public final class IdempotencyKeyUtil {
     }
 
     /**
-     * Generate a deterministic idempotency key from a prefix and parts.
+     * Tạo idempotency key ổn định từ prefix và các thành phần đầu vào, giúp nhận diện request lặp.
      * The key is formed as: prefix:hash(parts joined by ':')
      *
      * @param prefix the key prefix (e.g., "order", "payment")

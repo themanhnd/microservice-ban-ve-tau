@@ -1,4 +1,4 @@
 /**
- * Service implementations for Payment Service.
+ * Chứa các lớp hiện thực service của Payment Service.
  */
 package com.xxxx.payment.service.impl;

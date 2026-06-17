@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Fallback implementation for TicketServiceClient.
- * Returns error response when Ticket Service is unavailable.
+ * Fallback cho TicketServiceClient khi Ticket Service không phản hồi.
+ * Trả về phản hồi lỗi thống nhất để Booking Service biết không thể xác thực vé.
  */
 @Slf4j
 @Component

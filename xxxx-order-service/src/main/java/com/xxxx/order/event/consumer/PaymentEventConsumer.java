@@ -11,8 +11,14 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Kafka consumer cho các events từ Payment Service.
- * Xử lý PaymentCompleted và PaymentFailed trong saga flow.
+ * Kafka consumer nhận kết quả thanh toán từ payment-service.
+ *
+ * <p>Consumer này quyết định nhánh cuối của Saga:</p>
+ *
+ * <ul>
+ *   <li>{@code payment.completed}: order được xác nhận và chuyển sang bước booking.</li>
+ *   <li>{@code payment.failed}: order bị hủy và inventory phải được bù trừ.</li>
+ * </ul>
  */
 @Component
 @RequiredArgsConstructor
@@ -22,8 +28,9 @@ public class PaymentEventConsumer {
     private final OrderServiceImpl orderServiceImpl;
 
     /**
-     * Handle PaymentCompleted event - thanh toán thành công.
-     * Xác nhận đơn hàng và publish OrderConfirmedEvent.
+     * Xử lý {@code PaymentCompletedEvent} khi thanh toán thành công.
+     *
+     * <p>Tác động chính là xác nhận order và phát event cho booking-service hoàn tất phần booking cuối cùng.</p>
      */
     @KafkaListener(
             topics = KafkaTopics.PAYMENT_COMPLETED,
@@ -45,8 +52,9 @@ public class PaymentEventConsumer {
     }
 
     /**
-     * Handle PaymentFailed event - thanh toán thất bại.
-     * Hủy đơn hàng và trigger compensation (release inventory).
+     * Xử lý {@code PaymentFailedEvent} khi thanh toán thất bại.
+     *
+     * <p>Vì inventory đã reserve trước đó, nhánh này phải kích hoạt compensation để trả vé lại kho.</p>
      */
     @KafkaListener(
             topics = KafkaTopics.PAYMENT_FAILED,

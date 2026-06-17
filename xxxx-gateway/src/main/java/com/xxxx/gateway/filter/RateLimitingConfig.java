@@ -7,28 +7,34 @@ import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Mono;
 
 /**
- * Configuration for Redis-based rate limiting.
- * Uses client IP address as the rate limit key.
- * Default: 10 requests/second with burst capacity of 20.
+ * Cấu hình giới hạn tần suất request dựa trên Redis cho API Gateway.
+ *
+ * <p>Rate limit giúp bảo vệ hệ thống khỏi spam request hoặc spike traffic đột ngột. Gateway dùng IP client
+ * làm key nên mỗi IP có một quota riêng.</p>
+ *
+ * <p>Mặc định hiện tại: nạp lại 10 request/giây và cho phép bùng nổ ngắn tối đa 20 request.</p>
  */
 @Configuration
 public class RateLimitingConfig {
 
     /**
-     * Redis rate limiter with default replenish rate of 10 tokens/second
-     * and burst capacity of 20 tokens.
+     * Khai báo RedisRateLimiter dùng thuật toán token bucket.
+     *
+     * <p>{@code replenishRate=10}: mỗi giây nạp lại 10 token. {@code burstCapacity=20}: cho phép dồn tối đa 20 token
+     * để chịu được các đợt request ngắn nhưng không quá lớn.</p>
      */
     @Bean
     public RedisRateLimiter redisRateLimiter() {
-        // replenishRate: 10 requests per second
-        // burstCapacity: 20 requests max burst
-        // requestedTokens: 1 token per request
+        // replenishRate: mỗi giây nạp 10 token mới.
+        // burstCapacity: mỗi IP được tích lũy tối đa 20 token để chịu một đợt tăng request ngắn.
+        // requestedTokens: mỗi request tiêu tốn 1 token.
         return new RedisRateLimiter(10, 20, 1);
     }
 
     /**
-     * Key resolver that uses the client's IP address for rate limiting.
-     * Falls back to "anonymous" if the remote address is not available.
+     * Key resolver lấy IP của client làm khóa khi áp dụng rate limiting.
+     *
+     * <p>Nếu không lấy được địa chỉ remote, dùng key {@code anonymous} để request vẫn bị giới hạn thay vì bỏ qua rate limit.</p>
      */
     @Bean
     public KeyResolver ipKeyResolver() {

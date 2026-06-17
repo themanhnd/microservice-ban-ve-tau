@@ -9,6 +9,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+/**
+ * Response DTO trả về sau khi refresh token thành công.
+ */
 public class TokenResponse {
 
     private String accessToken;

@@ -1,4 +1,4 @@
 /**
- * Response DTOs for the Inventory service controllers.
+ * Chứa DTO response cho Inventory Service controllers.
  */
 package com.xxxx.inventory.controller.dto.response;

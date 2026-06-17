@@ -15,6 +15,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import java.util.List;
 
+/**
+ * Cấu hình bảo mật JWT cho Order Service.
+ *
+ * <p>Gateway đã xác thực JWT ở lớp ngoài, nhưng Order Service vẫn tự kiểm tra lại token để đảm bảo endpoint nội bộ
+ * không vô tình bị gọi trái phép khi request đi vòng qua Gateway hoặc khi service được gọi trực tiếp.</p>
+ */
 @Configuration
 @EnableMethodSecurity
 public class JwtSecurityConfig {

@@ -1,4 +1,4 @@
 /**
- * Exception handling for Payment Service.
+ * Chứa logic xử lý exception cho Payment Service.
  */
 package com.xxxx.payment.exception;

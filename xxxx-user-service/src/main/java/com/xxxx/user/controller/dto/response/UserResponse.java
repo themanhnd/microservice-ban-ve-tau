@@ -11,6 +11,11 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+/**
+ * Response DTO hiển thị thông tin người dùng ra API.
+ *
+ * <p>Không chứa trường nhạy cảm như password hash hoặc refresh token hash.</p>
+ */
 public class UserResponse {
 
     private Long id;

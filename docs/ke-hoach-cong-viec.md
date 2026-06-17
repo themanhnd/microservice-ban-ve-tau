@@ -1,7 +1,7 @@
 # 📋 Kế hoạch công việc (Work Plan)
 
 > File này để theo dõi tiến độ và biết tiếp tục từ đâu. Tick `[x]` khi xong.
-> Cập nhật lần cuối: 2026-06-02
+> Cập nhật lần cuối: 2026-06-17
 
 ---
 
@@ -10,11 +10,10 @@
 - [x] **Vá lỗ hổng Config Server** — sửa `search-locations`, mount `environment/config-repo`
       vào Docker, sửa `spring.config.import` để tôn trọng `SPRING_CLOUD_CONFIG_URI`, sửa mật
       khẩu MySQL trong 7 file config-repo.
-- [x] **Tài liệu kiến trúc** — `docs/architecture.md` (kiến trúc, giao tiếp, Saga, ERD,
-      observability, luồng VNPay).
+- [x] **Tài liệu kiến trúc** — `docs/architecture.md` đã cập nhật theo code/config hiện tại: gateway routes, Docker profiles, Saga, outbox, local-vs-Docker port.
 - [x] **Tài liệu công nghệ** — `docs/cong-nghe-giai-thich.md` (lý thuyết + bài toán tải cao).
-- [x] **README.md** — tổng quan dự án.
-- [x] **Đẩy lên Git** — remote `origin` = github.com/themanhnd/microservice-ban-ve-tau.
+- [x] **README.md** — tổng quan dự án, module, API chính, biến môi trường và ghi chú triển khai đã đồng bộ lại.
+- [x] **Chuẩn hóa tài liệu chạy dự án** — cập nhật `howtostart.md` theo Docker Compose hiện tại và cảnh báo khác biệt port local/Docker.
 - [x] **Flash sale #1: Khóa Redis an toàn (owner-safe)** — `DistributedLockService` (SET NX +
       Lua release theo token), 11 unit test.
 - [x] **Flash sale #2: Tồn kho từ DB + tự phục hồi Redis** — `sumQuantityByType`,
@@ -189,11 +188,6 @@ git commit -m "..."
 git push
 ```
 
-## 📌 Trạng thái Git hiện tại
-
-- Remote: `origin` → https://github.com/themanhnd/microservice-ban-ve-tau
-- Nhánh: `main` (đã set upstream)
-- Commit gần nhất: `feat: harden order saga reliability`
 
 ### Nhóm F — Độ tin cậy checkout/order saga — Ưu tiên: RẤT CAO
 
@@ -246,9 +240,9 @@ git push
   - Chạy MySQL + Kafka + Redis thật để kiểm tra transaction DB commit trước khi publish Kafka.
   - Test retry khi Kafka tạm thời down và publish lại khi Kafka phục hồi.
   - Test consumer idempotent khi Kafka deliver duplicate event.
-- [ ] **G5. Rà soát encoding/tài liệu còn mojibake**
-  - Chuẩn hoá `README.md`, `docs/architecture.md`, `docs/ke-hoach-cong-viec.md` sang UTF-8 no BOM.
-  - Sửa các đoạn văn bản đã bị mojibake từ trước.
+- [x] **G5. Rà soát encoding/tài liệu còn mojibake**
+  - Đã chuẩn hóa `README.md`, `howtostart.md`, `docs/architecture.md` theo trạng thái code hiện tại.
+  - Đã sửa đoạn mojibake cuối `docs/cong-nghe-giai-thich.md`.
 - [ ] **G6. Security/rate limit cho endpoint checkout/order**
   - Rate limit `POST /api/orders/place` theo user/IP để giảm spam double-click/retry ác ý.
   - Xác thực quyền xem `GET /api/orders/{orderNo}/checkout` chỉ cho đúng user sở hữu order.

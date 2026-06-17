@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Fallback implementation for EventServiceClient.
- * Returns error response when Event Service is unavailable.
+ * Fallback cho EventServiceClient khi Event Service không phản hồi.
+ * Trả về phản hồi lỗi thống nhất để Booking Service không bị đổ vỡ dây chuyền.
  */
 @Slf4j
 @Component

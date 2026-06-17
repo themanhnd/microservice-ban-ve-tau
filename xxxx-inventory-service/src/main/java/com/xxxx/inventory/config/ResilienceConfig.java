@@ -3,17 +3,17 @@ package com.xxxx.inventory.config;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Resilience4j configuration placeholder.
+ * Điểm mở rộng cấu hình Resilience4j cho Ticket Service.
  *
- * Circuit breaker, retry, bulkhead, and rate limiter configurations
- * are managed via the centralized Config Server (application.yml in config-repo).
+ * Các cấu hình circuit breaker, retry, bulkhead và rate limiter
+ * được quản lý tập trung qua Config Server trong config-repo.
  *
- * This class exists as an extension point for any programmatic resilience
- * customization that cannot be expressed through YAML configuration.
+ * Class này dùng làm điểm mở rộng khi cần cấu hình resilience bằng code
+ * mà YAML chưa mô tả được hoặc cần logic khởi tạo đặc biệt.
  */
 @Configuration
 public class ResilienceConfig {
-    // Resilience4j is configured via Spring Cloud Config Server.
+    // Resilience4j hiện được cấu hình qua Spring Cloud Config Server.
     // See config-repo/xxxx-inventory-service.yml for circuit breaker,
-    // retry, and bulkhead settings.
+    // retry và bulkhead đang áp dụng cho Ticket Service.
 }

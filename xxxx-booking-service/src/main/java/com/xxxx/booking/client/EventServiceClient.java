@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 /**
- * Feign client for communicating with Event Service.
+ * Feign client dùng để gọi sang Event Service qua service discovery.
  */
 @FeignClient(name = "xxxx-event-service", fallback = EventServiceClientFallback.class)
 public interface EventServiceClient {

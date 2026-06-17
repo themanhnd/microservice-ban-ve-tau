@@ -1,4 +1,4 @@
 /**
- * Configuration classes for the Ticket service.
+ * Chứa các lớp cấu hình hạ tầng của Ticket Service.
  */
 package com.xxxx.ticket.config;

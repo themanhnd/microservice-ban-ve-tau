@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Scheduler to warmup Redis cache for upcoming events.
+ * Scheduler làm nóng Redis cache cho các sự kiện sắp diễn ra, giúp request đầu tiên đọc nhanh hơn.
  * Runs daily at 6 AM to proactively load events for the next 7 days into cache.
  */
 @Component

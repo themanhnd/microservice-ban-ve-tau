@@ -19,12 +19,12 @@ public abstract class BaseEvent {
     private String eventId;
 
     /**
-     * Type of the event (typically the class simple name).
+     * Loại sự kiện, thường dùng tên class để consumer biết payload đại diện cho nghiệp vụ nào.
      */
     private String eventType;
 
     /**
-     * Timestamp when the event was created.
+     * Thời điểm sự kiện được tạo, giúp debug thứ tự xử lý và độ trễ qua Kafka.
      */
     private LocalDateTime timestamp;
 
@@ -34,12 +34,12 @@ public abstract class BaseEvent {
     private String correlationId;
 
     /**
-     * Name of the service that produced this event.
+     * Tên service phát sinh sự kiện, dùng để truy vết nguồn dữ liệu trong luồng saga.
      */
     private String sourceService;
 
     /**
-     * Schema version of the event, defaults to 1.
+     * Phiên bản schema của sự kiện, mặc định là 1 để hỗ trợ nâng cấp payload về sau.
      */
     private int version;
 

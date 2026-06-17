@@ -6,7 +6,7 @@ package com.xxxx.common.constant;
 public final class HttpHeaders {
 
     private HttpHeaders() {
-        // Constants class - prevent instantiation
+        // Lớp chỉ chứa hằng số, không cho phép khởi tạo object.
     }
 
     /**
@@ -20,7 +20,7 @@ public final class HttpHeaders {
     public static final String X_IDEMPOTENCY_KEY = "X-Idempotency-Key";
 
     /**
-     * Header identifying the calling service name.
+     * Header cho biết tên service đang gọi request, hữu ích khi trace lỗi giữa các microservice.
      */
     public static final String X_SERVICE_NAME = "X-Service-Name";
 }

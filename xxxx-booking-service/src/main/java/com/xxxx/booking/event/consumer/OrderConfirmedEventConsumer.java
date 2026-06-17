@@ -8,8 +8,10 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Kafka consumer nhận sự kiện OrderConfirmedEvent.
- * Khi đơn hàng được xác nhận, consumer cập nhật booking tương ứng sang trạng thái CONFIRMED.
+ * Kafka consumer nhận event {@code order.confirmed} từ order-service.
+ *
+ * <p>Khi order đã thanh toán thành công và được xác nhận, booking-service dùng event này để tạo mới hoặc
+ * xác nhận booking tương ứng cho người dùng.</p>
  */
 @Slf4j
 @Component

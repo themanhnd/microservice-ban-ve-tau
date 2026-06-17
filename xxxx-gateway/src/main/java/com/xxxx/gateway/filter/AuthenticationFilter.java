@@ -23,9 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Global filter that validates JWT tokens from the Authorization header.
+ * Global filter xác thực JWT lấy từ header Authorization trước khi request đi vào service phía sau.
  * Skips validation for configured public endpoints.
- * On invalid token, returns 401 Unauthorized.
+ * Nếu token thiếu, sai định dạng hoặc không hợp lệ thì trả về 401 Unauthorized ngay tại Gateway.
  * Extracts user info and passes as headers to downstream services.
  */
 @Slf4j
@@ -52,12 +52,12 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // Skip authentication for public endpoints
+        // Bỏ qua xác thực cho các endpoint công khai như login, swagger và health check.
         if (isPublicEndpoint(path)) {
             return chain.filter(exchange);
         }
 
-        // Check for Authorization header
+        // Kiểm tra header Authorization trước khi parse và xác thực JWT.
         String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
             return onUnauthorized(exchange, "Missing or invalid Authorization header");
@@ -67,8 +67,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
         try {
             Claims claims = validateToken(token);
-            // Strip spoofed identity headers from client, then add verified metadata for logs/debug.
-            // Authorization itself is forwarded unchanged and services verify JWT again.
+            // Xóa các header định danh do client tự gửi để tránh giả mạo, sau đó thêm metadata đã xác thực cho log/debug.
+            // Header Authorization vẫn được chuyển tiếp nguyên vẹn để service đích tự xác thực JWT lần nữa.
             ServerHttpRequest mutatedRequest = request.mutate()
                     .headers(headers -> {
                         headers.remove(X_USER_ID);
@@ -132,7 +132,8 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Run after CorrelationIdFilter but before other filters
+        // Chạy sau CorrelationIdFilter để log lỗi xác thực cũng có correlation id,
+        // nhưng vẫn chạy sớm trước các filter nghiệp vụ khác.
         return Ordered.HIGHEST_PRECEDENCE + 10;
     }
 }

@@ -1,224 +1,276 @@
 # 🎫 Microservice Bán Vé Tàu (xxxx Ticketing System)
 
-Hệ thống bán vé xây dựng theo kiến trúc **microservices** với Spring Boot 3 / Spring Cloud,
-thiết kế để xử lý các bài toán đặc thù của bán vé tải cao (flash sale): chống bán quá vé
-(oversell), tranh chấp tồn kho, idempotency, và giao dịch phân tán qua Saga.
+Hệ thống bán vé tàu theo kiến trúc **microservices** với Spring Boot 3, Spring Cloud,
+Kafka, Redis và MySQL. Code hiện tại tập trung vào bài toán bán vé tải cao: chống bán quá vé,
+giữ/hoàn tồn kho, idempotency khi checkout, Saga qua Kafka, outbox retry và thanh toán VnPay.
 
-> Java 21 · Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Kafka · MySQL · Redis · Docker
+> Java 21 · Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Kafka · MySQL · Redis · Docker Compose
 
 ---
 
 ## 📑 Mục lục
 
 - [Tổng quan kiến trúc](#-tổng-quan-kiến-trúc)
-- [Các service & cổng](#-các-service--cổng)
+- [Module và vai trò](#-module-và-vai-trò)
 - [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
-- [Luồng nghiệp vụ chính (Saga)](#-luồng-nghiệp-vụ-chính-saga)
+- [Luồng đặt vé hiện tại](#-luồng-đặt-vé-hiện-tại)
+- [API chính qua Gateway](#-api-chính-qua-gateway)
 - [Yêu cầu môi trường](#-yêu-cầu-môi-trường)
-- [Khởi chạy nhanh (Docker)](#-khởi-chạy-nhanh-docker)
-- [Chạy khi phát triển (local)](#-chạy-khi-phát-triển-local)
-- [Các điểm truy cập](#-các-điểm-truy-cập)
+- [Khởi chạy bằng Docker Compose](#-khởi-chạy-bằng-docker-compose)
+- [Chạy local khi phát triển](#-chạy-local-khi-phát-triển)
+- [Biến môi trường quan trọng](#-biến-môi-trường-quan-trọng)
 - [Tài liệu chi tiết](#-tài-liệu-chi-tiết)
-- [Ghi chú bảo mật](#-ghi-chú-bảo-mật)
+- [Ghi chú triển khai](#-ghi-chú-triển-khai)
 
 ---
 
 ## 🏗 Tổng quan kiến trúc
 
+```text
+Client / Frontend
+      │
+      ▼
+xxxx-gateway :8080
+(routing, JWT, correlation-id, Redis rate limit)
+      │ lb:// qua Eureka
+      ├── user-service      :8086  → user_db
+      ├── event-service     :8087  → event_db + Redis cache
+      ├── ticket-service    :8084  → ticket_db + Redis cache
+      ├── inventory-service :8085  → inventory_db + Redis + Kafka
+      ├── order-service     :8082  → order_db + Redis + Kafka + outbox
+      ├── payment-service   :8083  → payment_db + Kafka + VnPay + outbox
+      └── booking-service   :8081  → booking_db + Redis + Kafka
+
+Nền tảng: xxxx-discovery (Eureka :8761), xxxx-config (Config Server :8888)
+Hạ tầng: MySQL, Redis, Zookeeper/Kafka
+Quan sát tùy chọn: Prometheus, Grafana, Elasticsearch, Logstash, Kibana, Zipkin
 ```
-                       ┌─────────────┐
-   Client ───────────▶ │   Gateway   │ :8080  (routing + JWT + rate limit)
-                       └──────┬──────┘
-                              │ lb:// (qua Eureka)
-        ┌──────────────┬──────┴───────┬──────────────┐
-        ▼              ▼              ▼              ▼
-   user/event     ticket/inventory   order        payment / booking
-        │              │              │              │
-        └──── MySQL (mỗi service 1 DB) · Redis (cache/lock) · Kafka (event) ─────┘
 
-   Nền tảng:  Discovery (Eureka :8761)  ·  Config Server (:8888)
-   Quan sát:  Prometheus · Grafana · ELK · Zipkin
-```
+Nguyên tắc chính:
 
-Nguyên tắc thiết kế:
-- **Database-per-service** — mỗi service sở hữu database riêng, không chia sẻ schema.
-- **Cấu hình tập trung** — mọi cấu hình nằm ở `environment/config-repo`, phục vụ qua Config Server.
-- **Giao tiếp 2 kiểu** — đồng bộ (OpenFeign) cho việc nhanh, bất đồng bộ (Kafka) cho luồng dài.
-- **Khả chịu lỗi** — Resilience4j (circuit breaker, retry, bulkhead) bọc mọi lời gọi liên service.
+- **Database-per-service**: mỗi service sở hữu database riêng, khởi tạo trong `environment/init-db/init.sql`.
+- **Config tập trung**: business service lấy cấu hình từ `environment/config-repo/*-dev.yml` qua Config Server.
+- **Gateway là cổng public duy nhất trong Docker**: compose chỉ publish `8080:8080`; service/infra còn lại nằm trong network `xxxx-network`.
+- **Saga bất đồng bộ**: `order-service`, `inventory-service`, `payment-service`, `booking-service` phối hợp qua Kafka event.
+- **Outbox cho publish Kafka**: order/inventory/payment ghi event vào bảng outbox trong transaction DB, worker riêng publish và retry.
 
-## 🧩 Các service & cổng
+## 🧩 Module và vai trò
 
-| Service | Cổng | Vai trò |
-|---------|------|---------|
-| `xxxx-discovery` | 8761 | Service registry (Eureka) — danh bạ service |
-| `xxxx-config` | 8888 | Config Server — cấu hình tập trung |
-| `xxxx-gateway` | 8080 | API Gateway — cổng vào duy nhất, JWT, rate limit |
-| `xxxx-user-service` | 8086 | Người dùng, đăng nhập, nhân viên |
-| `xxxx-event-service` | 8087 | Sự kiện |
-| `xxxx-ticket-service` | 8084 | Loại vé & chi tiết vé |
-| `xxxx-inventory-service` | 8085 | Tồn kho vé (reserve/release, distributed lock) |
-| `xxxx-order-service` | 8082 | Điều phối Saga đặt hàng |
-| `xxxx-payment-service` | 8083 | Thanh toán (VNPay) |
-| `xxxx-booking-service` | 8081 | Đặt chỗ |
-| `xxxx-common` | — | Thư viện dùng chung (event, hằng số, response chuẩn) |
+| Module | Port dev | Vai trò |
+|--------|----------|---------|
+| `xxxx-common` | — | Thư viện chung: response chuẩn, exception, Kafka topic, event DTO, header/correlation/idempotency util |
+| `xxxx-discovery` | 8761 | Eureka Service Registry |
+| `xxxx-config` | 8888 | Spring Cloud Config Server, đọc `environment/config-repo` khi chạy Docker |
+| `xxxx-gateway` | 8080 | Gateway routing, JWT filter, correlation-id, Redis rate limiting, Swagger aggregation |
+| `xxxx-user-service` | 8086 | Đăng ký/đăng nhập/refresh/logout, thông tin user, employee, bootstrap admin, login rate limit |
+| `xxxx-event-service` | 8087 | CRUD sự kiện, cache Redis, warmup cache cho event sắp diễn ra |
+| `xxxx-ticket-service` | 8084 | CRUD ticket và ticket detail, loại bỏ dữ liệu soft-delete khi đọc danh sách |
+| `xxxx-inventory-service` | 8085 | Tính tồn kho từ DB, nạp Redis, reserve/release, bucket config, distributed lock, publish event tồn kho |
+| `xxxx-order-service` | 8082 | Điều phối checkout Saga, hàng đợi xử lý, idempotency key, timeout thanh toán, outbox event |
+| `xxxx-payment-service` | 8083 | Khởi tạo thanh toán VnPay, xác thực IPN/return, cập nhật transaction, publish payment event |
+| `xxxx-booking-service` | 8081 | Tạo/xác nhận/hủy booking, consumer `order.confirmed` và `order.cancelled` |
 
 ## 🛠 Công nghệ sử dụng
 
-| Nhóm | Công nghệ | Mục đích |
-|------|-----------|----------|
-| Nền tảng | Spring Boot 3.3.5, Java 21 | Khung ứng dụng cho từng service |
-| Hạ tầng MS | Eureka, Spring Cloud Config, Spring Cloud Gateway | Discovery, config, routing |
-| Giao tiếp | OpenFeign, Apache Kafka | Đồng bộ (REST) + bất đồng bộ (event/Saga) |
-| Độ bền | Resilience4j | Circuit breaker, retry, bulkhead, fallback |
-| Dữ liệu | MySQL 8, JPA/Hibernate | Lưu trữ quan hệ, ORM |
-| Hiệu năng | Redis | Cache, đếm tồn kho, distributed lock, rate limit |
-| Bảo mật | JWT (jjwt) | Xác thực stateless tại gateway |
-| Quan sát | Prometheus, Grafana, ELK, Zipkin | Metrics, log tập trung, tracing |
-| Vận hành | Docker, Docker Compose, Maven | Đóng gói & build |
+| Nhóm | Công nghệ | Cách dùng trong code |
+|------|-----------|----------------------|
+| Nền tảng | Java 21, Spring Boot 3.3.5 | Parent Maven multi-module trong `pom.xml` |
+| Spring Cloud | Eureka, Config, Gateway, OpenFeign | Discovery, config tập trung, route gateway, gọi đồng bộ giữa service |
+| Messaging | Kafka + Zookeeper | Saga event: order, inventory, payment, booking |
+| Độ tin cậy | Resilience4j, fallback, outbox retry | Circuit breaker/retry/bulkhead qua config; outbox DB cho publish Kafka an toàn hơn |
+| Dữ liệu | MySQL 8, Spring Data JPA | Mỗi service một DB; dev đang dùng `ddl-auto: update` |
+| Cache/lock | Redis | Cache dữ liệu đọc, tồn kho nhanh, distributed lock, rate limit |
+| Bảo mật | JWT (JJWT) | User service cấp token, Gateway xác thực, downstream service vẫn có cấu hình JWT |
+| API docs | springdoc-openapi | Swagger UI ở Gateway và route `/v3/api-docs/{service}` |
+| Observability | Actuator, Prometheus, Grafana, ELK, Zipkin | Bật qua profile `observability`; logback có template gửi Logstash |
+| Build/Run | Maven, Docker, Docker Compose profiles | Multi-module build và compose profile `infra/platform/business/observability` |
 
-> Giải thích cặn kẽ "vì sao dùng" và lý thuyết từng công nghệ: xem [`docs/cong-nghe-giai-thich.md`](docs/cong-nghe-giai-thich.md).
+## 🔄 Luồng đặt vé hiện tại
 
-## 🔄 Luồng nghiệp vụ chính (Saga)
+Luồng checkout chính đi qua `POST /api/orders/place` và được `order-service` điều phối:
 
-Đặt vé là một **Saga** điều phối bởi `order-service`, nối các service qua sự kiện Kafka, có
-bù trừ (compensation) khi thất bại:
+```text
+Client đặt vé
+  └─> order-service tạo order PROCESSING + queue token + idempotency key
+      └─> ghi OrderPlacedEvent vào outbox
+          └─> Kafka topic order.placed
+              └─> inventory-service reserve tồn kho
+                  ├─ thành công: InventoryReservedEvent → order-service gọi payment-service/initiate
+                  │   └─ order lưu paymentUrl, chuyển PAYMENT_PROCESSING để client redirect VnPay
+                  └─ thất bại: InventoryReserveFailedEvent → order CANCELLED
 
+VnPay callback/return
+  └─> payment-service xác thực chữ ký
+      ├─ thành công: PaymentCompletedEvent → order CONFIRMED → OrderConfirmedEvent → booking CONFIRMED
+      └─ thất bại: PaymentFailedEvent → order CANCELLED → OrderCancelledEvent → inventory release + booking cancel
 ```
-order.placed ─▶ inventory giữ vé ─▶ inventory.reserved
-            ─▶ payment xử lý ─▶ payment.completed
-            ─▶ order.confirmed ─▶ booking tạo chỗ
-```
 
-- Hết vé → `inventory.reserve-failed` → hủy đơn.
-- Thanh toán lỗi → `payment.failed` → `order.cancelled` (kèm trả vé về kho).
+Các cơ chế quan trọng:
 
-Chi tiết bài toán tải cao & cách xử lý (oversell, idempotency, distributed lock, bucket,
-waiting room): xem [`docs/cong-nghe-giai-thich.md`](docs/cong-nghe-giai-thich.md) — Phần II.
+- Header `Idempotency-Key` trên `POST /api/orders/place` giúp double-click/retry không tạo trùng đơn.
+- `GET /api/orders/{orderNo}/checkout` trả trạng thái checkout, vị trí queue, `paymentUrl`, `expiresAt`, `failureReason` để frontend polling/redirect.
+- Worker timeout trong order-service tự hủy đơn `PAYMENT_PROCESSING` quá hạn và phát `order.cancelled` để hoàn tồn kho.
+- Consumer được guard theo trạng thái để chịu được Kafka at-least-once và duplicate event.
+
+### Kafka topic đang dùng
+
+| Topic | Producer | Consumer | Ý nghĩa |
+|-------|----------|----------|---------|
+| `order.placed` | order-service | inventory-service | Yêu cầu giữ tồn kho sau khi tạo order |
+| `inventory.reserved` | inventory-service | order-service | Giữ tồn kho thành công, order bắt đầu tạo thanh toán |
+| `inventory.reserve-failed` | inventory-service | order-service | Giữ tồn kho thất bại, order bị hủy |
+| `payment.completed` | payment-service | order-service | Thanh toán thành công, order được xác nhận |
+| `payment.failed` | payment-service | order-service | Thanh toán thất bại, order bị hủy và cần bù trừ |
+| `order.confirmed` | order-service | booking-service | Tạo/xác nhận booking sau khi order thành công |
+| `order.cancelled` | order-service | inventory-service, booking-service | Hoàn tồn kho đã giữ và hủy booking liên quan |
+
+## 🌐 API chính qua Gateway
+
+Gateway route các path sau tới service tương ứng:
+
+| Path | Service |
+|------|---------|
+| `/api/users/**`, `/api/employees/**` | user-service |
+| `/api/events/**` | event-service |
+| `/api/tickets/**`, `/api/ticket-details/**` | ticket-service |
+| `/api/inventory/**` | inventory-service |
+| `/api/orders/**`, `/api/place-order/**` | order-service |
+| `/api/payment/**` | payment-service |
+| `/api/booking/**` | booking-service |
+| `/v3/api-docs/{booking,order,payment,ticket,inventory,user,event}` | OpenAPI docs từng service |
+
+Các endpoint đáng chú ý:
+
+- `POST /api/users/login`, `POST /api/users/refresh`, `POST /api/users/register`, `GET /api/users/me`
+- `POST /api/orders/place`, `GET /api/orders/{orderNo}/checkout`, `GET /api/orders/status/{orderNo}`
+- `POST /api/payment/initiate`, `POST /api/payment/vnpay-callback`, `GET /api/payment/vnpay-return`, `GET /api/payment/{transactionId}`
+- `GET /api/inventory/stock/{ticketDetailId}`, `POST /api/inventory/stock/initialize`, `POST /api/inventory/reserve`, `POST /api/inventory/release`
 
 ## ✅ Yêu cầu môi trường
 
-- Java 21 (Eclipse Temurin khuyến nghị)
+- Java 21
 - Maven 3.9+
-- Docker & Docker Compose
-- RAM cấp cho Docker: tối thiểu 8GB (chạy đầy đủ cả observability)
+- Docker và Docker Compose v2
+- RAM Docker khuyến nghị: 8GB+ nếu bật full business + observability
 
-## 🚀 Khởi chạy nhanh (Docker)
+## 🚀 Khởi chạy bằng Docker Compose
+
+1. Tạo file `.env` từ mẫu:
 
 ```bash
-# 1. Build toàn bộ
+cp .env.example .env
+```
+
+2. Sửa các secret bắt buộc trong `.env`:
+
+```text
+MYSQL_ROOT_PASSWORD
+GRAFANA_ADMIN_PASSWORD
+JWT_SECRET                 # tối thiểu 32 ký tự cho HMAC
+ENCRYPT_KEY
+VNPAY_TMN_CODE
+VNPAY_SECRET_KEY
+VNPAY_RETURN_URL           # local có thể dùng http://localhost:8080/api/payment/vnpay-return
+```
+
+3. Build toàn bộ module:
+
+```bash
 mvn clean package -DskipTests
-
-# 2. Dựng các nhóm compose cần dùng
-docker-compose --profile infra --profile platform --profile business up -d
-
-# 3. Nếu cần observability thì bật thêm
-docker-compose --profile observability up -d
-
-# 4. Kiểm tra
-docker-compose ps
 ```
 
-Thứ tự khởi động được Docker Compose tự xử lý qua `depends_on` + healthcheck:
-hạ tầng (MySQL/Redis/Kafka) → discovery → config → gateway → các service nghiệp vụ.
+4. Chạy hệ thống chính:
 
-Dùng profile để chạy nhẹ máy dev hơn:
 ```bash
-# Chỉ hạ tầng cho local development
-docker-compose --profile infra up -d
-
-# Hạ tầng + nền tảng (discovery/config/gateway)
-docker-compose --profile infra --profile platform up -d
-
-# Full backend không observability
-docker-compose --profile infra --profile platform --profile business up -d
-
-# Bật thêm observability khi cần
-docker-compose --profile observability up -d
+docker compose --profile infra --profile platform --profile business up -d
 ```
 
-Dừng hệ thống:
+5. Nếu cần monitoring/log/tracing:
+
 ```bash
-docker-compose down        # giữ dữ liệu
-docker-compose down -v     # xóa luôn volume (mất dữ liệu)
+docker compose --profile observability up -d
 ```
 
-## 💻 Chạy khi phát triển (local)
-
-Chỉ chạy hạ tầng bằng Docker, còn service đang sửa thì chạy bằng Maven cho nhanh:
+6. Kiểm tra:
 
 ```bash
-# 1. Hạ tầng
-docker-compose --profile infra up -d
+docker compose ps
+curl http://localhost:8080/actuator/health
+```
 
-# 2. Theo thứ tự: discovery → config → gateway → service nghiệp vụ
+> Lưu ý: compose hiện chỉ publish Gateway ra host ở `http://localhost:8080`. Discovery, Config, MySQL, Redis, Kafka và business service không expose port ra host trong file compose hiện tại.
+
+## 💻 Chạy local khi phát triển
+
+Có hai cách thường dùng:
+
+### Cách 1: Chạy hạ tầng bằng Docker, service bằng Maven
+
+```bash
+# Chỉ chạy MySQL/Redis/Kafka/Zookeeper
+docker compose --profile infra up -d
+
+# Chạy nền tảng theo thứ tự
 cd xxxx-discovery && mvn spring-boot:run
-cd xxxx-config    && mvn spring-boot:run
-cd xxxx-gateway   && mvn spring-boot:run
-cd xxxx-order-service && mvn spring-boot:run -Dspring-boot.run.profiles=dev
+cd ../xxxx-config && mvn spring-boot:run
+cd ../xxxx-gateway && mvn spring-boot:run
+
+# Chạy service nghiệp vụ cần debug
+cd ../xxxx-order-service && mvn spring-boot:run
 ```
 
-Chạy test một module:
+Khi chạy service trực tiếp trên host, config-repo đang dùng các endpoint dev:
+
+| Thành phần | Host/port dev |
+|------------|---------------|
+| MySQL | `localhost:3316` |
+| Redis | `localhost:6319` |
+| Kafka | `localhost:9094` |
+| Eureka | `http://localhost:8761/eureka/` |
+| Config Server | `http://localhost:8888` |
+
+Nếu dùng compose hiện tại không publish các port này, cần tự chỉnh compose override hoặc chạy infra theo cách khác để expose `3316/6319/9094`.
+
+### Cách 2: Chạy tất cả bằng Docker Compose
+
+Dùng khi chỉ cần chạy hệ thống end-to-end và gọi qua Gateway:
+
 ```bash
-mvn -pl xxxx-inventory-service test
+docker compose --profile infra --profile platform --profile business up -d --build
 ```
 
-## 🌐 Các điểm truy cập
+## 🔑 Biến môi trường quan trọng
 
-| Thành phần | URL |
-|------------|-----|
-| API Gateway | http://localhost:8080 |
-| Swagger UI (gom mọi service) | http://localhost:8080/swagger-ui.html |
-| Các service/infra khác | Chỉ truy cập trong Docker network `xxxx-network` |
+| Biến | Bắt buộc | Ý nghĩa |
+|------|----------|---------|
+| `MYSQL_ROOT_PASSWORD` | Có | Mật khẩu root MySQL, dùng cho các datasource trong Docker |
+| `JWT_SECRET` | Có | Secret ký JWT, tối thiểu 32 ký tự |
+| `JWT_ISSUER` | Không | Issuer JWT, mặc định `xxxx-user-service` |
+| `JWT_EXPIRATION_SECONDS` | Không | Thời gian sống access token, mặc định 1800 giây |
+| `JWT_REFRESH_EXPIRATION_SECONDS` | Không | Thời gian sống refresh token, mặc định 604800 giây |
+| `ENCRYPT_KEY` | Có | Khóa mã hóa/giải mã của Config Server |
+| `VNPAY_PAYMENT_URL` | Không | URL sandbox/production của VnPay |
+| `VNPAY_TMN_CODE` | Có với payment | Mã terminal VnPay |
+| `VNPAY_SECRET_KEY` | Có với payment | Secret key ký callback VnPay |
+| `VNPAY_RETURN_URL` | Có với payment | URL người dùng quay lại sau khi thanh toán |
+| `AUTH_BOOTSTRAP_ADMIN_*` | Không | Tạo tài khoản admin ban đầu nếu bật |
+| `AUTH_RATE_LIMIT_*` | Không | Giới hạn số lần login theo cửa sổ thời gian |
+| `GRAFANA_ADMIN_PASSWORD` | Có khi bật observability | Mật khẩu admin Grafana |
 
 ## 📚 Tài liệu chi tiết
 
 | Tài liệu | Nội dung |
 |----------|----------|
-| [`docs/architecture.md`](docs/architecture.md) | Sơ đồ kiến trúc, giao tiếp, ERD, observability, luồng VNPay |
-| [`docs/cong-nghe-giai-thich.md`](docs/cong-nghe-giai-thich.md) | Giải thích công nghệ (kiểu thầy giảng) + bài toán bán vé tải cao |
-| [`howtostart.md`](howtostart.md) | Hướng dẫn khởi động & troubleshooting |
+| [`howtostart.md`](howtostart.md) | Hướng dẫn chạy, profile Docker Compose, troubleshooting |
+| [`docs/architecture.md`](docs/architecture.md) | Kiến trúc, luồng Saga, topic Kafka, startup/deploy notes |
+| [`docs/cong-nghe-giai-thich.md`](docs/cong-nghe-giai-thich.md) | Giải thích công nghệ và lý do sử dụng |
+| [`docs/ke-hoach-cong-viec.md`](docs/ke-hoach-cong-viec.md) | Trạng thái công việc và backlog kỹ thuật |
+| [`docs/onboarding.md`](docs/onboarding.md) | Lộ trình đọc repo cho người mới và bản đồ luồng code |
 
-## 🔐 Ghi chú bảo mật
+## 🔐 Ghi chú triển khai
 
-> Các secret đã được tách ra biến môi trường. Tạo file `.env` từ `.env.example`
-> trước khi chạy Docker Compose.
->
-> Docker Compose chỉ expose gateway `8080`; MySQL, Redis, Kafka, observability,
-> Config Server, Discovery và các business service còn lại nằm trong Docker network
-> `xxxx-network`.
->
-> Khi triển khai VPS/production, đặt `VNPAY_RETURN_URL` trỏ tới domain public thật,
-> ví dụ `https://your-domain.example/api/payment/vnpay-return`.
->
-> Auth hiện tại do `user-service` cấp token sau login. Frontend không cần nhập JWT gateway thủ
-> công. `JWT_SECRET` bắt buộc lấy từ biến môi trường và dài tối thiểu 32 ký tự; có thể cấu hình
-> thêm `JWT_ISSUER`, `JWT_EXPIRATION_SECONDS`, `JWT_REFRESH_EXPIRATION_SECONDS`.
-
----
-
-## 📂 Cấu trúc thư mục
-
-```
-xxxx-microservices/
-├── docker-compose.yml          # Dựng toàn bộ hệ thống
-├── pom.xml                     # Maven parent (multi-module)
-├── environment/                # Cấu hình hạ tầng + config-repo
-│   ├── config-repo/            # ⭐ Nguồn cấu hình tập trung của Config Server
-│   ├── prometheus/ grafana/ logstash/ init-db/
-├── docs/                       # Tài liệu kiến trúc & công nghệ
-├── xxxx-common/                # Thư viện dùng chung
-├── xxxx-discovery/ xxxx-config/ xxxx-gateway/    # Nền tảng
-└── xxxx-{user,event,ticket,inventory,order,payment,booking}-service/
-```
-
-### Auth hardening env vars
-
-`user-service` ho tro cac bien moi de hardening auth:
-
-- `AUTH_BOOTSTRAP_ADMIN_ENABLED`
-- `AUTH_BOOTSTRAP_ADMIN_USERNAME`
-- `AUTH_BOOTSTRAP_ADMIN_EMAIL`
-- `AUTH_BOOTSTRAP_ADMIN_PASSWORD`
-- `AUTH_BOOTSTRAP_ADMIN_FULL_NAME`
-- `AUTH_RATE_LIMIT_MAX_ATTEMPTS`
-- `AUTH_RATE_LIMIT_WINDOW_SECONDS`
+- Không commit `.env`; luôn tạo từ `.env.example` và đổi secret trước khi chạy.
+- `VNPAY_RETURN_URL` khi chạy production phải là URL public thật, ví dụ `https://your-domain.example/api/payment/vnpay-return`.
+- `ddl-auto: update` chỉ phù hợp dev; trước production cần Flyway/Liquibase migration cho các bảng outbox, idempotency, timeout, booking unique index.
+- Cần vận hành outbox/DLQ nội bộ: theo dõi record `PENDING`, `RETRY`, `FAILED`, có cơ chế replay/ignore khi Kafka lỗi kéo dài.
+- Nếu expose trực tiếp service/infra ngoài Docker network, cần bổ sung firewall, credential riêng và TLS phù hợp.

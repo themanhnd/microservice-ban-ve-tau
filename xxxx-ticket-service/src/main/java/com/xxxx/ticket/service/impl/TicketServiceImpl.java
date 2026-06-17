@@ -94,7 +94,7 @@ public class TicketServiceImpl implements TicketService {
         log.info("Soft deleted ticket with id: {}", id);
     }
 
-    // ========== PRIVATE HELPER METHODS ==========
+    // ========== Các hàm hỗ trợ nội bộ ==========
 
     private TicketResponse mapToResponse(TicketEntity entity) {
         List<TicketDetailResponse> detailResponses = Collections.emptyList();

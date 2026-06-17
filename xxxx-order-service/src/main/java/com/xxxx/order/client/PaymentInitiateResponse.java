@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Response DTO from Payment Service after initiating a payment.
+ * DTO response Payment Service trả về sau khi tạo giao dịch, gồm mã giao dịch và URL thanh toán.
  */
 @Data
 @Builder
@@ -15,6 +15,6 @@ import lombok.NoArgsConstructor;
 public class PaymentInitiateResponse {
 
     private String transactionId;
-    private String paymentUrl;  // VnPay redirect URL
+    private String paymentUrl;  // URL chuyển hướng sang trang thanh toán VnPay
     private String status;
 }

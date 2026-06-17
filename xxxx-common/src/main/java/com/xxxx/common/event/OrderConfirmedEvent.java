@@ -7,8 +7,8 @@ import java.util.Objects;
 
 /**
  * Event published when an order is confirmed after successful payment.
- * Producer: Order Service
- * Consumer: Booking Service, Notification
+ * Nguồn phát: Order Service.
+ * Bên nhận: Booking Service xác nhận booking; Notification có thể gửi thông báo cho người dùng.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class OrderConfirmedEvent extends BaseEvent {

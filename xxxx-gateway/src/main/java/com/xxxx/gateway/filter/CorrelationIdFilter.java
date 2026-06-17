@@ -12,10 +12,13 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /**
- * Global filter that ensures every request has a Correlation ID.
- * If the incoming request does not contain an X-Correlation-Id header,
- * a new UUID is generated. The correlation ID is always added to the
- * response headers and set in MDC for logging.
+ * Global filter đảm bảo mọi request đều có Correlation ID để truy vết.
+ *
+ * <p>Correlation ID là mã chung đi theo request từ Gateway xuống các service. Khi cần debug một lỗi,
+ * người vận hành có thể tìm cùng mã này trong log của gateway, order, inventory, payment...</p>
+ *
+ * <p>Nếu client chưa gửi {@code X-Correlation-Id}, Gateway tự sinh UUID mới; nếu đã có thì giữ lại để
+ * hỗ trợ truy vết từ hệ thống bên ngoài.</p>
  */
 @Slf4j
 @Component
@@ -34,10 +37,10 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
             log.debug("Using existing Correlation ID: {}", correlationId);
         }
 
-        // Set in MDC for logging within this filter chain
+        // Đưa correlation id vào MDC để log trong cùng filter chain tự động in ra mã truy vết.
         CorrelationIdUtil.set(correlationId);
 
-        // Add correlation ID to the request being forwarded downstream
+        // Gắn correlation ID vào request trước khi chuyển tiếp xuống service phía sau.
         ServerHttpRequest mutatedRequest = request.mutate()
                 .header(HttpHeaders.X_CORRELATION_ID, correlationId)
                 .build();
@@ -46,7 +49,7 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
                 .request(mutatedRequest)
                 .build();
 
-        // Add correlation ID to response headers
+        // Gắn correlation ID vào response để client có thể cung cấp khi cần tra soát lỗi.
         final String finalCorrelationId = correlationId;
         mutatedExchange.getResponse().getHeaders()
                 .add(HttpHeaders.X_CORRELATION_ID, finalCorrelationId);
@@ -57,7 +60,7 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        // Run early to ensure correlation ID is available for other filters
+        // Chạy rất sớm để các filter phía sau, đặc biệt AuthenticationFilter, đều có correlation id khi ghi log.
         return Ordered.HIGHEST_PRECEDENCE + 1;
     }
 }

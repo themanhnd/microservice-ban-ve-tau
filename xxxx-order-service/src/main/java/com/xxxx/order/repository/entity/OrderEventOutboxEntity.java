@@ -11,7 +11,12 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Outbox lưu event cần publish Kafka để tránh mất event khi DB commit thành công nhưng Kafka lỗi.
+ * Entity outbox lưu event Kafka chờ publish của order-service.
+ *
+ * <p>Outbox pattern giúp transaction DB và việc phát Kafka không bị lệch nhau: nghiệp vụ ghi event vào DB trước,
+ * worker riêng đọc bảng này để publish Kafka sau commit. Nếu Kafka tạm lỗi, record được retry thay vì mất event.</p>
+ *
+ * <p>Các trạng thái thường gặp: PENDING, PUBLISHED, RETRY, FAILED.</p>
  */
 @Data
 @Builder

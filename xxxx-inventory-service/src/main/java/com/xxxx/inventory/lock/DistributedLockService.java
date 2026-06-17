@@ -27,6 +27,12 @@ import java.util.function.Supplier;
  *       chủ sở hữu thực sự mới xóa được khóa của mình.</li>
  * </ul>
  */
+/**
+ * Service khóa phân tán dựa trên Redis.
+ *
+ * <p>Lock được dùng ở các đoạn cực kỳ nhạy cảm với race condition, ví dụ khởi tạo tồn kho hoặc reserve stock trên
+ * cùng một bucket. Khóa đi kèm token chủ sở hữu để chỉ đúng người giữ khóa mới được mở khóa.</p>
+ */
 @Slf4j
 @Component
 public class DistributedLockService {

@@ -23,7 +23,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    // ==================== Producer Configuration ====================
+    // ==================== Cấu hình Producer ====================
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {

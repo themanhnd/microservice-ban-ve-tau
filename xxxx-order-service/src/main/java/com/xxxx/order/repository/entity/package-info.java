@@ -1,4 +1,4 @@
 /**
- * JPA entity classes for the Order service.
+ * Chứa các entity JPA ánh xạ bảng dữ liệu của Order Service.
  */
 package com.xxxx.order.repository.entity;

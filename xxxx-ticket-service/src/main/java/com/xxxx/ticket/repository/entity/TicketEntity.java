@@ -12,6 +12,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Entity biểu diễn một ticket tổng quát.
+ *
+ * <p>Ticket là lớp cha chứa thông tin chung; mỗi ticket có thể có nhiều {@code TicketDetailEntity} là các biến thể cụ thể để bán.</p>
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -36,8 +41,9 @@ public class TicketEntity {
     @Column(name = "end_time")
     private LocalDateTime endTime;
 
+    /** Trạng thái ticket: 0=INACTIVE, 1=ACTIVE, 2=DELETED. */
     @Column(name = "status", nullable = false)
-    private Integer status; // 0=INACTIVE, 1=ACTIVE, 2=DELETED
+    private Integer status;
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default

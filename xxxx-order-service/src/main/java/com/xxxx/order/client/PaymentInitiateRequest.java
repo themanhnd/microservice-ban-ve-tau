@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 /**
- * Request DTO for initiating a payment via Payment Service.
+ * DTO request gửi sang Payment Service để khởi tạo giao dịch thanh toán.
  */
 @Data
 @Builder

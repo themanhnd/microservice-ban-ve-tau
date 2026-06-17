@@ -56,7 +56,7 @@ public class OrderPlacedEventConsumer {
             ReserveStockResponse response = inventoryService.reserveStock(request);
 
             if (response.isSuccess()) {
-                // Reserve thành công → publish InventoryReservedEvent
+                // Giữ vé thành công thì phát InventoryReservedEvent để Order Service tiếp tục saga.
                 InventoryReservedEvent reservedEvent = new InventoryReservedEvent();
                 reservedEvent.setOrderId(event.getOrderId());
                 reservedEvent.setTicketDetailId(event.getTicketDetailId());
@@ -68,7 +68,7 @@ public class OrderPlacedEventConsumer {
                 log.info("Stock reserved successfully for orderId={}, reservedQuantity={}, remainingStock={}",
                         event.getOrderId(), response.getReservedQuantity(), response.getRemainingStock());
             } else {
-                // Reserve thất bại → publish InventoryReserveFailedEvent
+                // Giữ vé thất bại thì phát InventoryReserveFailedEvent để Order Service hủy hoặc rollback đơn.
                 InventoryReserveFailedEvent failedEvent = new InventoryReserveFailedEvent();
                 failedEvent.setOrderId(event.getOrderId());
                 failedEvent.setTicketDetailId(event.getTicketDetailId());
@@ -83,7 +83,8 @@ public class OrderPlacedEventConsumer {
                         response.getRemainingStock() != null ? response.getRemainingStock() : 0);
             }
         } catch (Exception ex) {
-            // Exception xảy ra → publish InventoryReserveFailedEvent với error reason
+            // Nếu có exception, vẫn phát InventoryReserveFailedEvent kèm lý do lỗi để Saga không bị treo.
+            // Nhờ vậy order-service luôn nhận được kết quả cuối cùng, thay vì chờ vô hạn rồi kẹt ở trạng thái trung gian.
             log.error("Exception while processing OrderPlacedEvent for orderId={}: {}",
                     event.getOrderId(), ex.getMessage(), ex);
 

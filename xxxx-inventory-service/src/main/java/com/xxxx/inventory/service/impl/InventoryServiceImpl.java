@@ -25,7 +25,19 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Triển khai nghiệp vụ tồn kho, dùng DB làm nguồn sự thật và Redis làm cache/lock tăng tốc.
+ * Service hiện thực nghiệp vụ tồn kho vé.
+ *
+ * <p>Nguyên tắc thiết kế quan trọng: DB là "sổ cái sự thật" còn Redis là lớp tăng tốc. Mọi lần allot,
+ * reserve hoặc release đều được ghi thành bản ghi lịch sử trong DB; Redis chỉ giữ số tồn khả dụng để xử lý nhanh.</p>
+ *
+ * <p>Với người mới, có thể hiểu flow như sau:</p>
+ *
+ * <ul>
+ *   <li>{@code initializeStock}: nạp lượng vé ban đầu vào DB rồi đẩy số khả dụng lên Redis.</li>
+ *   <li>{@code reserveStock}: trừ tồn khả dụng khi order-service yêu cầu giữ vé.</li>
+ *   <li>{@code releaseStock}: cộng trả tồn khi order bị hủy hoặc payment thất bại.</li>
+ *   <li>{@code reconcileAllStockToRedis}: khôi phục Redis từ DB nếu cache lệch hoặc Redis restart.</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -47,7 +59,10 @@ public class InventoryServiceImpl implements InventoryService {
     private final DistributedLockService lockService;
 
     /**
-     * Lấy tồn kho hiện tại, ưu tiên Redis và tự phục hồi từ DB khi cache miss.
+     * Lấy tồn kho hiện tại của một ticket detail.
+     *
+     * <p>Ưu tiên đọc Redis để nhanh. Nếu Redis chưa có dữ liệu, method tự tính lại từ DB rồi nạp lại Redis
+     * theo pattern cache-aside.</p>
      */
     @Override
     public StockLevelResponse getStockLevel(Long ticketDetailId) {
@@ -86,7 +101,10 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Khởi tạo tồn kho ban đầu, bảo vệ bằng distributed lock để tránh ALLOT trùng.
+     * Khởi tạo tồn kho ban đầu cho một ticket detail.
+     *
+     * <p>Method này ghi bản ghi ALLOT vào DB rồi nạp số tồn sang Redis. Distributed lock giúp tránh trường hợp
+     * nhiều request khởi tạo cùng lúc tạo ra nhiều bản ghi ALLOT trùng nhau.</p>
      */
     @Override
     @Transactional
@@ -128,7 +146,12 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Giữ vé cho đơn hàng, dùng bucket + lock để giảm tranh chấp khi có nhiều request đồng thời.
+     * Giữ vé cho một order.
+     *
+     * <p>Đây là method nóng nhất trong flash sale. Nó chọn bucket theo orderId, khóa bucket bằng Redis lock,
+     * kiểm tra tồn khả dụng, trừ Redis và ghi bản ghi RESERVE vào DB để audit.</p>
+     *
+     * <p>Nếu Redis bị mất key, method có thể tự phục hồi từ DB trước khi reserve để tránh bán quá số vé thật.</p>
      */
     @Override
     @Transactional
@@ -219,7 +242,10 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Hoàn vé đã giữ khi order bị hủy/thanh toán lỗi, bảo đảm release idempotent.
+     * Hoàn vé đã giữ khi order bị hủy hoặc thanh toán lỗi.
+     *
+     * <p>Release phải idempotent vì Kafka có thể gửi lặp event {@code order.cancelled}. Nếu cùng một order đã release rồi,
+     * method không được cộng tồn lần thứ hai.</p>
      */
     @Override
     @Transactional
@@ -273,6 +299,9 @@ public class InventoryServiceImpl implements InventoryService {
 
     /**
      * Đồng bộ lại toàn bộ tồn kho từ DB sang Redis sau restart hoặc khi cache lệch.
+     *
+     * <p>Đây là job sửa sai cho Redis. Vì DB lưu đầy đủ lịch sử ALLOT/RESERVE/RELEASE, hệ thống có thể tính lại
+     * tồn khả dụng chuẩn rồi ghi đè vào Redis.</p>
      */
     @Override
     public void reconcileAllStockToRedis() {
@@ -308,6 +337,8 @@ public class InventoryServiceImpl implements InventoryService {
 
     /**
      * Tái tạo key Redis từ lịch sử ALLOT/RESERVE/RELEASE trong DB.
+     *
+     * <p>Helper này được dùng khi Redis cache miss hoặc khi reconciliation job cần khôi phục dữ liệu.</p>
      */
     private void rehydrateRedisFromDb(Long ticketDetailId) {
         int total = calculateTotalStockFromDb(ticketDetailId);
@@ -412,6 +443,9 @@ public class InventoryServiceImpl implements InventoryService {
 
     /**
      * Bổ sung tồn từ bucket khác khi bucket hiện tại xuống dưới ngưỡng cấu hình.
+     *
+     * <p>Bucket giúp chia một điểm nóng thành nhiều điểm nhỏ. Tuy nhiên bucket có thể lệch tải, nên cơ chế back-source
+     * chuyển một phần tồn từ bucket còn dư sang bucket đang thiếu để tránh false sold-out.</p>
      */
     private int backSourceIfNeeded(Long ticketDetailId, int bucketIndex, int currentAvailable) {
         Optional<InventoryBucketConfigEntity> optionalConfig = inventoryBucketConfigRepository.findByIsDefaultTrue();
@@ -487,7 +521,10 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     /**
-     * Tính tồn khả dụng theo công thức ALLOT - RESERVE + RELEASE.
+     * Tính tồn khả dụng theo công thức {@code ALLOT - RESERVE + RELEASE}.
+     *
+     * <p>Đây là công thức chuẩn khi lấy DB làm nguồn sự thật: ALLOT là số được mở bán, RESERVE là số đang giữ,
+     * RELEASE là số được trả lại sau khi order hủy/thanh toán lỗi.</p>
      */
     private int calculateAvailableStockFromDb(Long ticketDetailId) {
         long allot = inventoryAllotDetailRepository.sumQuantityByType(ticketDetailId, TYPE_ALLOT);
