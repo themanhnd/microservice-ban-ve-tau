@@ -50,6 +50,17 @@ spring:
             - Path=/v3/api-docs/event
           filters:
             - RewritePath=/v3/api-docs/event, /v3/api-docs
+        # Sensitive write endpoint: đặt rate limit riêng cho bước đặt vé để giảm spam/double-click.
+        - id: order-place-service
+          uri: lb://xxxx-order-service
+          predicates:
+            - Path=/api/orders/place
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                rate-limiter: "#{@orderPlaceRateLimiter}"
+                key-resolver: "#{@userOrIpKeyResolver}"
         # Business service routes
         - id: booking-service
           uri: lb://xxxx-booking-service

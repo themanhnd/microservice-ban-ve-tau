@@ -274,7 +274,7 @@ Codebase có sẵn:
 
 ## 10. Các điểm còn cần chú ý trước production
 
-- `ddl-auto: update` vẫn đang dùng trong config dev, chưa phù hợp production.
-- Cần migration chính thức cho bảng outbox, timeout, idempotency, unique index booking/order.
-- Cần quy trình vận hành outbox record `FAILED` như replay/ignore/audit.
+- `ddl-auto: update` vẫn đang dùng trong config dev; đã có Flyway migration đầu tiên cho saga/outbox nhưng vẫn cần review kỹ trước production.
+- Đã có API admin để vận hành outbox record `FAILED` theo hướng replay/ignore/audit ở `order-service`, `payment-service`, `inventory-service`.
+- Đã có metric `app.outbox.records`, `app.outbox.oldest_failed_age_seconds`, `app.outbox.max_attempt_count` và rule cảnh báo Prometheus cho outbox.
 - Nếu cần local dev hoàn chỉnh bằng Maven + Docker infra, nên thêm compose override để expose `3316`, `6319`, `9094` đúng như config dev.

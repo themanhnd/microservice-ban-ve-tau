@@ -1,0 +1,29 @@
+groups:
+  - name: outbox-reliability
+    rules:
+      - alert: OutboxHasFailedRecords
+        expr: app_outbox_records{status="FAILED"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} có outbox record rơi vào DLQ"
+          description: "{{ $labels.service }} đang có {{ $value }} record FAILED. Admin cần kiểm tra endpoint /api/*/admin/outbox/failed để replay hoặc ignore có lý do."
+
+      - alert: OutboxStuckTooLong
+        expr: app_outbox_oldest_failed_age_seconds > 300
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} có outbox FAILED bị kẹt quá 5 phút"
+          description: "Record FAILED cũ nhất của {{ $labels.service }} đã tồn tại {{ $value }} giây. Cần kiểm tra Kafka, network hoặc lỗi serialize event."
+
+      - alert: OutboxRetryTooManyTimes
+        expr: app_outbox_max_attempt_count >= 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} có outbox retry quá nhiều lần"
+          description: "Số lần retry lớn nhất của {{ $labels.service }} là {{ $value }}. Nếu record đã FAILED, hãy replay sau khi sửa lỗi hạ tầng hoặc ignore kèm lý do audit."

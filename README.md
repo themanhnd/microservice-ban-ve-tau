@@ -271,6 +271,7 @@ docker compose --profile infra --profile platform --profile business up -d --bui
 
 - Không commit `.env`; luôn tạo từ `.env.example` và đổi secret trước khi chạy.
 - `VNPAY_RETURN_URL` khi chạy production phải là URL public thật, ví dụ `https://your-domain.example/api/payment/vnpay-return`.
-- `ddl-auto: update` chỉ phù hợp dev; trước production cần Flyway/Liquibase migration cho các bảng outbox, idempotency, timeout, booking unique index.
-- Cần vận hành outbox/DLQ nội bộ: theo dõi record `PENDING`, `RETRY`, `FAILED`, có cơ chế replay/ignore khi Kafka lỗi kéo dài.
+- `ddl-auto: update` chỉ phù hợp dev; repo hiện đã có Flyway migration đầu tiên cho phần saga/outbox, nhưng vẫn nên review kỹ trước khi chạy production thật.
+- Đã có admin API cho outbox/DLQ nội bộ của `order-service`, `payment-service`, `inventory-service` để xem `FAILED`, replay và ignore có ghi lý do audit.
+- Đã có metric `app.outbox.*` trên `/actuator/prometheus` và rule cảnh báo Prometheus tại `environment/prometheus/rules/outbox-alerts.yml`.
 - Nếu expose trực tiếp service/infra ngoài Docker network, cần bổ sung firewall, credential riêng và TLS phù hợp.

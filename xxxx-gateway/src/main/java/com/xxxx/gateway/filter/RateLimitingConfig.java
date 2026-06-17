@@ -1,5 +1,6 @@
 package com.xxxx.gateway.filter;
 
+import com.xxxx.common.constant.HttpHeaders;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.context.annotation.Bean;
@@ -44,5 +45,36 @@ public class RateLimitingConfig {
                     : "anonymous";
             return Mono.just(ip);
         };
+    }
+
+    /**
+     * Key resolver ưu tiên user đã xác thực, fallback về IP nếu request chưa có user identity.
+     *
+     * <p>Resolver này phù hợp cho các endpoint nhạy cảm như đặt vé. Nếu user đã login thì rate limit theo user sẽ
+     * công bằng hơn so với chỉ limit theo IP; nếu chưa có user thì vẫn còn lớp bảo vệ theo IP.</p>
+     */
+    @Bean
+    public KeyResolver userOrIpKeyResolver() {
+        return exchange -> {
+            String userId = exchange.getRequest().getHeaders().getFirst(HttpHeaders.X_USER_ID);
+            if (userId != null && !userId.isBlank()) {
+                return Mono.just("user:" + userId.trim());
+            }
+            String ip = exchange.getRequest().getRemoteAddress() != null
+                    ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()
+                    : "anonymous";
+            return Mono.just("ip:" + ip);
+        };
+    }
+
+    /**
+     * Rate limiter riêng cho API đặt vé.
+     *
+     * <p>Mức này chặt hơn default filter vì {@code POST /api/orders/place} là endpoint có nguy cơ spam,
+     * double-click hoặc retry dồn dập cao nhất trong hệ thống.</p>
+     */
+    @Bean
+    public RedisRateLimiter orderPlaceRateLimiter() {
+        return new RedisRateLimiter(3, 5, 1);
     }
 }

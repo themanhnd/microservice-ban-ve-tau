@@ -216,37 +216,45 @@ git push
 
 - [ ] **Migration DB chính thức**
   - Hiện entity mới dựa vào JPA auto-DDL; trước production cần thêm Flyway/Liquibase migration cho bảng outbox, cột order timeout/idempotency và unique index booking/order.
-- [ ] **Vận hành DLQ nội bộ**
-  - Bổ sung endpoint/admin job để xem, replay hoặc bỏ qua outbox record trạng thái `FAILED`.
-- [ ] **Metrics/alerting cho outbox**
-  - Theo dõi số record `PENDING/RETRY/FAILED`, tuổi record cũ nhất và số lần retry để cảnh báo kẹt publish.
+- [x] **Vận hành DLQ nội bộ**
+  - Đã có admin endpoint cho `order-service`, `payment-service`, `inventory-service` để xem `FAILED`, replay và ignore có lưu lý do audit.
+- [x] **Metrics/alerting cho outbox**
+  - Đã có endpoint tổng hợp metric admin, metric Actuator `app.outbox.*` và rule cảnh báo Prometheus cho trường hợp `FAILED`, retry nhiều hoặc kẹt quá lâu.
 
 
 ### Nhóm G — Việc cần làm tiếp sau F5 — Ưu tiên: CAO
 
-- [ ] **G1. Thêm migration DB chính thức cho saga/outbox**
-  - Thêm Flyway/Liquibase migration cho bảng outbox của `order-service`, `inventory-service`, `payment-service`.
-  - Thêm migration cho `idempotencyKey`, `paymentExpiresAt`, `paymentTransactionId`, `paymentUrl`, `failureReason` nếu production DB chưa có.
-  - Thêm unique index cho booking theo `orderNo` và index truy vấn outbox theo `status/nextAttemptAt`.
-- [ ] **G2. Admin endpoint/job để vận hành DLQ nội bộ**
+- [x] **G1. Thêm migration DB chính thức cho saga/outbox**
+  - Đã thêm Flyway migration đầu tiên cho bảng outbox của `order-service`, `inventory-service`, `payment-service`.
+  - Đã thêm migration saga cho các cột `idempotencyKey`, `paymentExpiresAt`, `paymentTransactionId`, `paymentUrl`, `failureReason` của order/payment.
+  - Đã thêm migration unique index cho booking theo `orderNo` và index truy vấn outbox theo `status/nextAttemptAt`.
+  - Đã bật Flyway theo kiểu `baseline-on-migrate` trong config dev của các service liên quan để an toàn hơn với schema đã tồn tại.
+  - Đã thêm `OrderFlywayMigrationIntegrationTest` để chạy migration order-service trên MySQL thật với schema cũ tối thiểu.
+  - Đã thêm `PaymentFlywayMigrationIntegrationTest`, `InventoryFlywayMigrationIntegrationTest`, `BookingFlywayMigrationIntegrationTest` để kiểm tra migration còn lại trên MySQL thật.
+- [x] **G2. Admin endpoint/job để vận hành DLQ nội bộ**
   - Liệt kê outbox record `FAILED` theo service/topic/thời gian.
   - Cho phép replay record đã fail sau khi sửa lỗi hạ tầng.
   - Có thao tác ignore/resolve kèm lý do để phục vụ audit.
-- [ ] **G3. Metrics và alerting cho outbox**
+- [x] **G3. Metrics và alerting cho outbox**
   - Expose metric số lượng `PENDING`, `RETRY`, `FAILED` theo service/topic.
   - Theo dõi tuổi record cũ nhất và số lần retry cao nhất.
   - Bổ sung alert khi có `FAILED` hoặc outbox bị kẹt quá ngưỡng.
 - [ ] **G4. Integration test với Testcontainers**
+  - Đã bắt đầu bằng `InventoryReserveIntegrationTest`: chạy MySQL + Redis thật, tạo 20 request giữ vé đồng thời trên tồn kho 10 và assert không oversell.
+  - Đã thêm `OrderOutboxIntegrationTest`: chạy MySQL + Kafka thật, lưu record outbox `PENDING`, publish qua worker và assert record chuyển `PUBLISHED` + Kafka nhận event thật.
+  - `OrderOutboxIntegrationTest` cũng đã phủ nhánh lỗi: event deserialize lỗi sẽ không mất record mà chuyển `RETRY`, tăng `attemptCount` và giữ `lastError`.
+  - Đã thêm `PaymentCallbackIntegrationTest`: chạy MySQL thật, gọi VnPay callback thành công 2 lần và assert chỉ có 1 outbox `payment.completed`.
+  - Đã thêm `OrderPaymentConsumerIdempotencyIntegrationTest`: chạy MySQL thật, xử lý duplicate `inventory.reserved`/`payment.completed`/`payment.failed` và assert không gọi payment lặp, không sinh outbox trùng.
   - Chạy MySQL + Kafka + Redis thật để kiểm tra transaction DB commit trước khi publish Kafka.
   - Test retry khi Kafka tạm thời down và publish lại khi Kafka phục hồi.
   - Test consumer idempotent khi Kafka deliver duplicate event.
 - [x] **G5. Rà soát encoding/tài liệu còn mojibake**
   - Đã chuẩn hóa `README.md`, `howtostart.md`, `docs/architecture.md` theo trạng thái code hiện tại.
   - Đã sửa đoạn mojibake cuối `docs/cong-nghe-giai-thich.md`.
-- [ ] **G6. Security/rate limit cho endpoint checkout/order**
-  - Rate limit `POST /api/orders/place` theo user/IP để giảm spam double-click/retry ác ý.
-  - Xác thực quyền xem `GET /api/orders/{orderNo}/checkout` chỉ cho đúng user sở hữu order.
-  - Chuẩn hoá error response không lộ thông tin nội bộ.
+- [x] **G6. Security/rate limit cho endpoint checkout/order**
+  - Đã thêm route rate limit riêng cho `POST /api/orders/place` ở Gateway, ưu tiên key theo user đã xác thực và fallback về IP.
+  - Quyền xem `GET /api/orders/{orderNo}/checkout` đã được guard bằng `@orderAuthorization.canAccessOrder(...)`.
+  - Error response bảo mật hiện vẫn theo handler thống nhất; nếu cần có thể siết thêm ở vòng sau.
 
 ### Ghi chú cho lần làm tiếp
 
