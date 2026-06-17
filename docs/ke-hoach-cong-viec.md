@@ -261,3 +261,21 @@ git push
 - Ưu tiên làm G1 trước nếu chuẩn bị deploy production, vì entity hiện tại đang phụ thuộc JPA auto-DDL.
 - Sau G1, làm G2 + G3 để có khả năng vận hành/replay khi Kafka publish fail.
 - G4 nên làm trước khi refactor lớn tiếp theo để bắt lỗi end-to-end sớm.
+
+### Roadmap tương lai — Cân nhắc Debezium CDC (chưa ưu tiên ngay)
+
+- [ ] **H1. Đánh giá có nên chuyển từ outbox polling sang Debezium hay không**
+  - Hiện tại hệ thống đã có outbox tự triển khai khá đầy đủ: ghi DB trong transaction, worker publish, retry, DLQ nội bộ, metrics, admin replay/ignore và integration test.
+  - Vì vậy Debezium **chưa phải ưu tiên số 1 ở giai đoạn này**; chỉ nên cân nhắc khi hệ thống tăng mạnh số lượng service producer hoặc tải publish Kafka lớn hơn.
+
+- [ ] **H2. Làm PoC Debezium cho 1 service trước, không thay toàn hệ ngay**
+  - Ưu tiên thử trên `order-service` hoặc `payment-service` vì đây là 2 service có outbox quan trọng nhất trong Saga.
+  - Giữ nguyên bảng outbox, chỉ thay worker polling bằng Debezium Outbox/Event Router để so sánh độ phức tạp và độ ổn định.
+
+- [ ] **H3. So sánh chi phí vận hành trước khi quyết định chuyển đổi**
+  - Đánh giá thêm hạ tầng cần có: Kafka Connect, Debezium connector, config connector, monitoring connector, schema/history topic.
+  - So sánh các tiêu chí: độ dễ debug, effort local dev, độ phức tạp production, thông lượng event, effort bảo trì code Java hiện tại.
+
+- [ ] **H4. Chỉ chuyển hẳn sang Debezium khi có lợi ích rõ ràng hơn mô hình hiện tại**
+  - Nếu outbox polling hiện tại vẫn đáp ứng tốt SLA, dễ vận hành và dễ debug thì tiếp tục giữ kiến trúc hiện tại.
+  - Nếu PoC cho thấy Debezium giảm tải polling đáng kể, đơn giản hóa publish path và team đã sẵn sàng vận hành Kafka Connect thì mới lập kế hoạch migrate từng service.
